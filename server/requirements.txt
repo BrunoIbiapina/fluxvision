@@ -1,0 +1,35 @@
+# --- FluxVision backend ---
+# Core web
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.9
+pydantic==2.9.2
+pydantic-settings==2.5.2
+
+# Persistence
+SQLAlchemy==2.0.35
+alembic==1.13.3
+
+# Visão computacional / IA
+# OpenCV "headless" para ambientes sem GUI (container / servidor)
+opencv-python-headless==4.10.0.84
+numpy==1.26.4
+Pillow==10.4.0
+
+# Ultralytics (YOLOv8). Opcional — o sistema funciona sem ele, caindo
+# em detector simulado, mas recomendado para detecção real.
+ultralytics==8.3.6
+
+# Utilitários
+httpx==0.27.2
+python-dotenv==1.0.1
+# yt-dlp resolve URLs do YouTube para HLS (manifest m3u8) que o OpenCV
+# consegue abrir. Necessário para a feature "Ao vivo" consumir lives do
+# YouTube; RTSP direto não depende dele.
+yt-dlp>=2024.10.7
+
+# Cliente oficial do Anthropic — usado pelo classificador de viatura
+# policial (opção A do roadmap: VLM remoto). Só precisa estar instalado
+# se FLUXVISION_VLM_POLICE_ENABLED=true; do contrário o código detecta
+# a ausência e mantém a feature desligada.
+anthropic>=0.40.0

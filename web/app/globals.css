@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body {
+    height: 100%;
+  }
+  body {
+    @apply bg-bg text-ink antialiased;
+    background-image:
+      radial-gradient(1200px 600px at 100% -10%, rgba(56,189,248,0.08), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(52,211,153,0.05), transparent 60%);
+    background-attachment: fixed;
+  }
+  ::selection {
+    @apply bg-brand/30 text-ink;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-bg-border bg-bg-card shadow-card;
+  }
+  .card-elevated {
+    @apply rounded-xl border border-bg-border bg-bg-elevated shadow-card;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border border-bg-border
+           bg-bg-elevated px-2.5 py-1 text-xs font-medium text-ink-muted;
+  }
+
+  /* Botões reutilizáveis (tema escuro) */
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md border border-bg-border
+           bg-bg-elevated px-3 py-1.5 text-sm text-ink
+           hover:border-brand/40 hover:text-ink
+           disabled:opacity-50 disabled:cursor-not-allowed
+           transition-colors;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md
+           bg-brand text-bg font-semibold px-3 py-1.5 text-sm
+           hover:bg-brand-700
+           disabled:opacity-50 disabled:cursor-not-allowed
+           transition-colors;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-1 rounded-md
+           px-2 py-1 text-sm text-ink-muted
+           hover:bg-bg-elevated hover:text-ink
+           disabled:opacity-50 disabled:cursor-not-allowed
+           transition-colors;
+  }
+
+  /* Inputs / selects / textareas */
+  .input {
+    @apply w-full rounded-md border border-bg-border bg-bg-card
+           px-3 py-1.5 text-sm text-ink placeholder:text-ink-soft
+           focus:outline-none focus:border-brand/60 focus:ring-1 focus:ring-brand/30
+           disabled:opacity-50;
+  }
+
+  .nav-link {
+    @apply flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-ink-muted
+           hover:bg-bg-elevated hover:text-ink transition-colors;
+  }
+  .nav-link.active {
+    @apply bg-bg-elevated text-ink;
+    box-shadow: inset 2px 0 0 theme("colors.brand.DEFAULT");
+  }
+}
+
+/* Leaflet precisa disto para renderizar no tema escuro */
+.leaflet-container { background: #0a0e1a !important; }
+.leaflet-popup-content-wrapper {
+  background: #121a2e !important;
+  color: #e2e8f0 !important;
+  border: 1px solid #1e2a47;
+}
+.leaflet-popup-tip { background: #121a2e !important; }

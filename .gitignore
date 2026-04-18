@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / Next
+node_modules/
+.next/
+out/
+dist/
+.turbo/
+*.tsbuildinfo
+next-env.d.ts
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Editores / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Dados do projeto
+server/data/uploads/*
+server/data/heatmaps/*
+server/data/models/*
+!server/data/uploads/.gitkeep
+!server/data/heatmaps/.gitkeep
+!server/data/models/.gitkeep
+*.sqlite
+*.sqlite3
+*.db
+
+# YOLO pesos
+*.pt
+!README*.pt
+
+# Dados gerados (batch mode salva aqui — não versionar)
+server/data/annotated/*.mp4
+server/data/heatmaps/*.png
+server/data/uploads/*
+!server/data/uploads/.gitkeep
+!server/data/heatmaps/.gitkeep
+!server/data/annotated/.gitkeep

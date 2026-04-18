@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: fluxvision-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./server/data:/app/data
+    environment:
+      - FLUXVISION_DB_URL=sqlite:////app/data/fluxvision.db
+      - FLUXVISION_UPLOAD_DIR=/app/data/uploads
+      - FLUXVISION_HEATMAP_DIR=/app/data/heatmaps
+      - FLUXVISION_CORS_ORIGINS=http://localhost:3000
+      - FLUXVISION_SEED_ON_START=1
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: fluxvision-web
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+    depends_on:
+      - api
+    restart: unless-stopped
