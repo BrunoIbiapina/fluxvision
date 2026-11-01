@@ -2,6 +2,8 @@
 
 ![FluxVision: painel de contagem de veículos](docs/preview-portfolio.png)
 
+> **In English:** Computer-vision platform that reads street-camera video (file, RTSP, HLS, YouTube or webcam), counts vehicles and pedestrians one by one and turns it into dashboards: hourly flow, peak hours, heatmaps and anomaly alerts. YOLOv8/v11 and RT-DETR detection with IoU tracking, separate API and front end.
+
 > Sistema de IA que analisa vídeos e câmeras ao vivo para monitorar fluxo de
 > veículos e pedestres, gerar dashboards analíticos, mapas de calor,
 > comparativos históricos e alertas de anomalias — com foco em segurança
