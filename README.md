@@ -1,5 +1,7 @@
 # FluxVision — Plataforma de Inteligência de Fluxo Urbano por Vídeo
 
+![FluxVision: painel de contagem de veículos](docs/preview-portfolio.png)
+
 > Sistema de IA que analisa vídeos e câmeras ao vivo para monitorar fluxo de
 > veículos e pedestres, gerar dashboards analíticos, mapas de calor,
 > comparativos históricos e alertas de anomalias — com foco em segurança
