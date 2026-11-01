@@ -165,6 +165,22 @@ Alertas são rate-limited (dedupe por track + intervalo global por câmera) para
 | VLM (opcional)      | Anthropic Claude 3.5 Sonnet (vision)              |
 | Ingestão drone      | Externa: nginx-rtmp (consumidor fala RTMP)        |
 
+## Decisões técnicas
+
+- **NMS entre classes a IoU 0,6** (`server/app/vision/detector.py`). O detector às vezes marca a mesma pessoa como pedestre e como moto; suprimir a caixa repetida entre classes evita contar duas vezes.
+- **Tracker por IoU, sem dependência extra.** Simples e rápido o bastante para CPU no MVP. A troca é perder identidade em oclusão longa; o caminho para produção é o ByteTrack.
+- **Pedestre nunca entra no fluxo de veículos.** As contagens são separadas desde a detecção, para o indicador principal não ser inflado.
+- **Agregação por hora, dia e mês em `TrafficSummary`**, gravada tanto no processamento em lote quanto no ao vivo, para o painel consultar números prontos em vez de varrer detecções brutas.
+- **Alertas com limite de frequência** (por track e por câmera), para um evento longo não virar centenas de linhas no banco.
+- **IA de imagem (Claude Vision) desligada por padrão** (`vlm_police_enabled = False`), porque cada chamada tem custo; quando ligada, roda no máximo a cada 30 s e só aceita confiança acima de 0,55.
+- **Back-end e front-end independentes**, cada um com dependências e `Dockerfile` próprios.
+
+## Limitações conhecidas e próximos passos
+
+- Ainda **não há testes automatizados nem integração contínua**; os primeiros alvos são o NMS entre classes e o tracker, que são funções puras.
+- O MVP usa SQLite, `BackgroundTasks` do FastAPI e disco local. Para produção, o plano é PostgreSQL com TimescaleDB, Celery com Redis e armazenamento S3/MinIO.
+- O tracker por IoU perde a identidade quando o objeto some atrás de outro por muito tempo.
+
 ## Configuração (variáveis de ambiente)
 
 Prefixo `FLUXVISION_` — todas opcionais, defaults sensatos.
