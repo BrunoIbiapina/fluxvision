@@ -12,9 +12,20 @@ import {
   YAxis,
 } from "recharts";
 
+import PageHeader from "@/components/PageHeader";
+import SegmentedControl from "@/components/SegmentedControl";
+import Sheet from "@/components/Sheet";
 import { getCompare } from "@/lib/api";
+import {
+  CHART_AXIS,
+  CHART_CURSOR,
+  CHART_FONT_SIZE,
+  CHART_GRID,
+  CHART_TOOLTIP_LABEL_STYLE,
+  CHART_TOOLTIP_STYLE,
+} from "@/lib/chartTheme";
 import type { ComparePayload } from "@/lib/types";
-import { formatNumber, formatPct } from "@/lib/utils";
+import { cn, formatNumber, formatPct } from "@/lib/utils";
 
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 19);
@@ -25,7 +36,7 @@ const PRESETS: Array<{
   build: () => { a: [Date, Date]; b: [Date, Date] };
 }> = [
   {
-    label: "Hoje vs. ontem",
+    label: "Hoje e ontem",
     build: () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -38,7 +49,7 @@ const PRESETS: Array<{
     },
   },
   {
-    label: "Semana atual vs. anterior",
+    label: "Esta semana e a anterior",
     build: () => {
       const end = new Date();
       const a0 = new Date(end);
@@ -49,7 +60,7 @@ const PRESETS: Array<{
     },
   },
   {
-    label: "Mês atual vs. anterior",
+    label: "Este mês e o anterior",
     build: () => {
       const end = new Date();
       const a0 = new Date(end);
@@ -60,7 +71,7 @@ const PRESETS: Array<{
     },
   },
   {
-    label: "Últimos 30 vs. 30 anteriores",
+    label: "30 dias e os 30 anteriores",
     build: () => {
       const end = new Date();
       const a0 = new Date(end);
@@ -72,6 +83,12 @@ const PRESETS: Array<{
   },
 ];
 
+const GRANULARITIES: Array<{ value: "hour" | "day" | "month"; label: string }> = [
+  { value: "hour", label: "Por hora" },
+  { value: "day", label: "Por dia" },
+  { value: "month", label: "Por mês" },
+];
+
 export default function ComparisonPage() {
   const [preset, setPreset] = useState(0);
   const [granularity, setGran] = useState<"hour" | "day" | "month">("day");
@@ -81,136 +98,136 @@ export default function ComparisonPage() {
   useEffect(() => {
     const { a, b } = PRESETS[preset].build();
     getCompare(isoDate(a[0]), isoDate(a[1]), isoDate(b[0]), isoDate(b[1]), granularity)
-      .then(setData)
-      .catch((e) => setErr(e.message));
+      .then((d) => {
+        setData(d);
+        setErr(null);
+      })
+      .catch((e) =>
+        setErr(
+          `Não foi possível comparar os períodos: ${
+            e?.message ?? "a API não respondeu"
+          }. Escolha outro período ou recarregue a página.`
+        )
+      );
   }, [preset, granularity]);
 
   const chart = mergeSeries(data);
 
-  return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-bold">Comparativo histórico</h1>
-        <p className="text-sm text-ink-muted mt-1">
-          Avalie variações entre períodos, turnos, semanas e meses para
-          detectar tendências e anomalias estruturais.
-        </p>
-      </header>
+  const grew = (data?.variation_pct ?? 0) >= 0;
+  // Sem contagem na referência não existe base para calcular variação.
+  const noBase = (data?.total_b ?? 0) === 0;
 
-      <div className="card p-3 flex flex-wrap items-center gap-2">
-        {PRESETS.map((p, i) => (
-          <button
-            key={p.label}
-            className={`px-3 py-1.5 text-xs rounded-md border ${
-              preset === i
-                ? "bg-brand/15 border-brand/40 text-brand"
-                : "border-bg-border text-ink-muted hover:text-ink"
-            }`}
-            onClick={() => setPreset(i)}
-          >
-            {p.label}
-          </button>
-        ))}
-        <div className="mx-2 h-6 w-px bg-bg-border" />
-        {(["hour", "day", "month"] as const).map((g) => (
-          <button
-            key={g}
-            className={`px-3 py-1.5 text-xs rounded-md border ${
-              granularity === g
-                ? "bg-brand/15 border-brand/40 text-brand"
-                : "border-bg-border text-ink-muted hover:text-ink"
-            }`}
-            onClick={() => setGran(g)}
-          >
-            {g}
-          </button>
-        ))}
+  return (
+    <div className="space-y-10">
+      <PageHeader
+        title="Comparativo"
+        description="Dois períodos lado a lado: o período A contra o período B, que serve de referência."
+      />
+
+      <div className="flex max-w-full flex-wrap gap-x-4 gap-y-3">
+        <SegmentedControl
+          label="Períodos comparados"
+          options={PRESETS.map((p, i) => ({ value: i, label: p.label }))}
+          value={preset}
+          onChange={setPreset}
+        />
+        <SegmentedControl
+          label="Agrupamento"
+          options={GRANULARITIES}
+          value={granularity}
+          onChange={setGran}
+        />
       </div>
 
       {err && (
-        <div className="card p-4 border-negative/40 bg-negative/10 text-negative text-sm">
+        <p role="alert" className="alert-error">
           {err}
-        </div>
+        </p>
       )}
 
       {data && (
         <>
-          <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="card p-5">
-              <div className="text-xs uppercase tracking-wider text-ink-muted">
-                Período A
+          <section>
+            <dl className="grid grid-cols-1 gap-x-12 gap-y-6 md:grid-cols-3">
+              {[
+                { label: "Período A", range: data.label_a, total: data.total_a },
+                { label: "Período B, referência", range: data.label_b, total: data.total_b },
+              ].map((side) => (
+                <div
+                  key={side.label}
+
+                >
+                  <dt className="text-sm text-ink-muted">{side.label}</dt>
+                  <dd className="mt-1 font-display text-5xl font-bold leading-none tabular-nums">
+                    {formatNumber(side.total)}
+                  </dd>
+                  <dd className="mt-1 text-sm text-ink-muted">
+                    veículos, {side.range}
+                  </dd>
+                </div>
+              ))}
+              <div>
+                <dt className="text-sm text-ink-muted">Variação de A sobre B</dt>
+                <dd
+                  className={cn(
+                    "mt-1 font-display text-5xl font-bold leading-none tabular-nums",
+                    noBase ? "text-ink-muted" : grew ? "text-positive" : "text-negative"
+                  )}
+                >
+                  {noBase ? "Sem base" : formatPct(data.variation_pct)}
+                </dd>
+                <dd className="mt-1 text-sm text-ink-muted">
+                  {data.total_a === 0 && data.total_b === 0
+                    ? "Nenhum dos dois períodos tem contagem"
+                    : noBase
+                    ? "O período B não tem contagem para comparar"
+                    : grew
+                    ? "O fluxo cresceu em relação à referência"
+                    : "O fluxo caiu em relação à referência"}
+                </dd>
               </div>
-              <div className="text-lg font-semibold mt-1">{data.label_a}</div>
-              <div className="mt-3 text-3xl font-bold">
-                {formatNumber(data.total_a)}
-              </div>
-              <div className="text-xs text-ink-muted">veículos contados</div>
-            </div>
-            <div className="card p-5">
-              <div className="text-xs uppercase tracking-wider text-ink-muted">
-                Período B (referência)
-              </div>
-              <div className="text-lg font-semibold mt-1">{data.label_b}</div>
-              <div className="mt-3 text-3xl font-bold">
-                {formatNumber(data.total_b)}
-              </div>
-              <div className="text-xs text-ink-muted">veículos contados</div>
-            </div>
-            <div
-              className={`card p-5 ${
-                data.variation_pct >= 0 ? "bg-positive/5" : "bg-negative/5"
-              }`}
-            >
-              <div className="text-xs uppercase tracking-wider text-ink-muted">
-                Variação A vs. B
-              </div>
-              <div
-                className={`mt-3 text-4xl font-bold ${
-                  data.variation_pct >= 0 ? "text-positive" : "text-negative"
-                }`}
-              >
-                {formatPct(data.variation_pct)}
-              </div>
-              <div className="text-xs text-ink-muted mt-1">
-                {data.variation_pct >= 0
-                  ? "fluxo cresceu em relação ao período de referência"
-                  : "fluxo caiu em relação ao período de referência"}
-              </div>
-            </div>
+            </dl>
           </section>
 
-          <div className="card p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-sm font-semibold">
-                  Série comparada — A vs. B
-                </h3>
-                <p className="text-xs text-ink-muted">
-                  Barras lado a lado para cada bucket
-                </p>
-              </div>
-            </div>
-            <ResponsiveContainer width="100%" height={360}>
-              <BarChart data={chart} margin={{ left: -10, right: 10 }}>
-                <CartesianGrid stroke="#1e2a47" strokeDasharray="3 3" />
-                <XAxis dataKey="bucket" stroke="#64748b" fontSize={11} />
-                <YAxis stroke="#64748b" fontSize={11} allowDecimals={false} />
-                <Tooltip
-                  contentStyle={{
-                    background: "#121a2e",
-                    border: "1px solid #1e2a47",
-                    borderRadius: 8,
-                    fontSize: 12,
-                  }}
-                  labelStyle={{ color: "#94a3b8" }}
-                  formatter={(v: number) => formatNumber(v)}
-                />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="a" fill="#38bdf8" name="Período A" />
-                <Bar dataKey="b" fill="#64748b" name="Período B" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          <Sheet title="Série comparada">
+            {chart.every((c) => c.a === 0 && c.b === 0) ? (
+              <p className="py-6 text-ink-muted">
+                Sem contagem nos dois períodos. A captura mais antiga pode estar
+                fora das janelas comparadas.
+              </p>
+            ) : (
+              <ResponsiveContainer width="100%" height={360}>
+                <BarChart data={chart} margin={{ left: -8, right: 8, top: 4 }} maxBarSize={40}>
+                  <CartesianGrid stroke={CHART_GRID} vertical={false} />
+                  <XAxis dataKey="bucket" stroke={CHART_AXIS} fontSize={CHART_FONT_SIZE} tickLine={false} />
+                  <YAxis
+                    stroke={CHART_AXIS}
+                    fontSize={CHART_FONT_SIZE}
+                    allowDecimals={false}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(v: number) => formatNumber(v)}
+                  />
+                  <Tooltip
+                    cursor={CHART_CURSOR}
+                    contentStyle={CHART_TOOLTIP_STYLE}
+                    labelStyle={CHART_TOOLTIP_LABEL_STYLE}
+                    itemStyle={{ color: "rgb(var(--ink))" }}
+                    formatter={(v: number) => formatNumber(v)}
+                  />
+                  <Legend
+                    iconType="square"
+                    wrapperStyle={{ fontSize: 13 }}
+                    formatter={(value) => (
+                      <span style={{ color: "rgb(var(--ink-muted))" }}>{value}</span>
+                    )}
+                  />
+                  <Bar dataKey="a" fill="rgb(var(--ink))" name="Período A" isAnimationActive={false} />
+                  <Bar dataKey="b" fill="rgb(var(--ink) / 0.35)" name="Período B" isAnimationActive={false} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </Sheet>
         </>
       )}
     </div>

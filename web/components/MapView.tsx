@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 
+import SegmentedControl from "@/components/SegmentedControl";
+import Sheet from "@/components/Sheet";
 import type { GeoPoint } from "@/lib/types";
 import { categoryLabel, formatNumber } from "@/lib/utils";
 
@@ -60,11 +62,16 @@ function radius(intensity: number): number {
   return 8 + intensity * 24;
 }
 
+// Rampa sequencial de um matiz só: quanto mais fluxo, mais escuro o verde.
+const INTENSITY_STEPS = [
+  { min: 0.75, color: "#063D28", label: "muito alto" },
+  { min: 0.5, color: "#0B6B45", label: "alto" },
+  { min: 0.25, color: "#3F9C73", label: "médio" },
+  { min: 0, color: "#8CC9AC", label: "baixo" },
+];
+
 function color(intensity: number): string {
-  if (intensity > 0.75) return "#ef4444";
-  if (intensity > 0.5)  return "#fbbf24";
-  if (intensity > 0.25) return "#38bdf8";
-  return "#34d399";
+  return (INTENSITY_STEPS.find((s) => intensity > s.min) ?? INTENSITY_STEPS[3]).color;
 }
 
 // Calcula bounding box dos pontos (lat min, lng min, lat max, lng max)
@@ -94,7 +101,13 @@ function zoomForSpread(latSpread: number, lngSpread: number): number {
   return 4;
 }
 
-export default function MapView({ points, height = 420 }: Props) {
+export default function MapView({ points: allPoints, height = 420 }: Props) {
+  // Câmera cadastrada sem coordenadas vem como 0, 0 e jogaria o mapa no oceano.
+  const points = useMemo(
+    () => allPoints.filter((p) => !(p.latitude === 0 && p.longitude === 0)),
+    [allPoints]
+  );
+  const unlocated = allPoints.filter((p) => p.latitude === 0 && p.longitude === 0);
   // Carrega o CSS do Leaflet só no client (evita FOUC)
   const [ready, setReady] = useState(false);
   useEffect(() => {
@@ -107,6 +120,15 @@ export default function MapView({ points, height = 420 }: Props) {
 
   // Basemap ativo — começa no "Ruas" porque é o que mostra nome de avenida
   const [basemapId, setBasemapId] = useState<BasemapId>("streets");
+  // No tema escuro o mapa claro vira um bloco branco no meio da página.
+  useEffect(() => {
+    const theme = document.documentElement.dataset.theme;
+    const dark =
+      theme === "dark" ||
+      (theme !== "light" &&
+        window.matchMedia("(prefers-color-scheme: dark)").matches);
+    if (dark) setBasemapId("dark");
+  }, []);
   const basemap = BASEMAPS.find((b) => b.id === basemapId) ?? BASEMAPS[0];
 
   // Calcula centro + zoom inicial sempre que os pontos mudam.
@@ -139,41 +161,18 @@ export default function MapView({ points, height = 420 }: Props) {
   }, [points]);
 
   return (
-    <div className="card p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <div>
-          <h3 className="text-sm font-semibold">Mapa de calor geográfico</h3>
-          <p className="text-xs text-ink-muted">
-            Intensidade proporcional ao fluxo acumulado no período
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {/* seletor de basemap */}
-          <div className="flex gap-1">
-            {BASEMAPS.map((b) => (
-              <button
-                key={b.id}
-                onClick={() => setBasemapId(b.id)}
-                className={`px-2.5 py-1 text-[11px] rounded-md border transition-colors ${
-                  basemapId === b.id
-                    ? "bg-brand/15 border-brand/40 text-brand"
-                    : "border-bg-border text-ink-muted hover:text-ink"
-                }`}
-              >
-                {b.label}
-              </button>
-            ))}
-          </div>
-          <div className="hidden md:flex items-center gap-2 text-xs text-ink-muted">
-            <Legend color="#34d399" label="baixo" />
-            <Legend color="#38bdf8" label="médio" />
-            <Legend color="#fbbf24" label="alto" />
-            <Legend color="#ef4444" label="crítico" />
-          </div>
-        </div>
-      </div>
-
-      <div style={{ height }} className="rounded-lg overflow-hidden border border-bg-border">
+    <Sheet
+      title="Mapa das câmeras"
+      aside={
+        <SegmentedControl
+          label="Mapa de base"
+          options={BASEMAPS.map((b) => ({ value: b.id, label: b.label }))}
+          value={basemapId}
+          onChange={setBasemapId}
+        />
+      }
+    >
+      <div style={{ height }} className="isolate overflow-hidden rounded-lg">
         {ready && (
           <MapContainer
             key={mapKey}
@@ -197,7 +196,7 @@ export default function MapView({ points, height = 420 }: Props) {
                 pathOptions={{
                   color: color(p.intensity),
                   fillColor: color(p.intensity),
-                  fillOpacity: 0.4,
+                  fillOpacity: 0.55,
                   weight: 1.5,
                 }}
               >
@@ -205,9 +204,9 @@ export default function MapView({ points, height = 420 }: Props) {
                   <div style={{ minWidth: 180 }}>
                     <div style={{ fontWeight: 600 }}>{p.camera_name}</div>
                     <div style={{ fontSize: 11, opacity: 0.7 }}>
-                      {p.city_name} · {categoryLabel(p.category)}
+                      {p.city_name}, {categoryLabel(p.category).toLowerCase()}
                     </div>
-                    <div style={{ fontSize: 11, opacity: 0.7, fontFamily: "monospace" }}>
+                    <div style={{ fontSize: 11, opacity: 0.7 }}>
                       {p.latitude.toFixed(6)}, {p.longitude.toFixed(6)}
                     </div>
                     <div style={{ marginTop: 6, fontSize: 13 }}>
@@ -220,15 +219,26 @@ export default function MapView({ points, height = 420 }: Props) {
           </MapContainer>
         )}
       </div>
-    </div>
-  );
-}
-
-function Legend({ color, label }: { color: string; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1">
-      <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
-      {label}
-    </span>
+      {unlocated.length > 0 && (
+        <p className="pt-3 text-sm text-ink-muted">
+          Fora do mapa por falta de coordenadas:{" "}
+          {unlocated.map((p) => p.camera_name).join(", ")}. Informe latitude e
+          longitude na tela Câmeras.
+        </p>
+      )}
+      <p className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-3 text-sm text-ink-muted">
+        <span>Fluxo relativo:</span>
+        {[...INTENSITY_STEPS].reverse().map((s) => (
+          <span key={s.label} className="inline-flex items-center gap-1.5">
+            <span
+              className="h-3 w-3 rounded-full ring-1 ring-bg-border"
+              style={{ background: s.color }}
+              aria-hidden
+            />
+            {s.label}
+          </span>
+        ))}
+      </p>
+    </Sheet>
   );
 }

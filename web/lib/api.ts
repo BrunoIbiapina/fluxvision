@@ -196,8 +196,11 @@ export const getCompare = (
   );
 
 // ---------- alerts ----------
-export const getAlerts = (onlyOpen = true) =>
-  jget<Alert[]>(`/api/alerts?only_open=${onlyOpen}`);
+/** `limit`: a API devolve os mais recentes, 50 por padrão e no máximo 500. */
+export const getAlerts = (onlyOpen = true, limit?: number) =>
+  jget<Alert[]>(
+    `/api/alerts?only_open=${onlyOpen}${limit ? `&limit=${limit}` : ""}`
+  );
 
 export const ackAlert = (id: number) =>
   jget<Alert>(`/api/alerts/${id}/ack`, { method: "POST" });

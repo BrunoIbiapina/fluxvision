@@ -1,81 +1,84 @@
 "use client";
 
-import { Building2, Calendar, Filter } from "lucide-react";
-import { useState } from "react";
-
+import SegmentedControl from "@/components/SegmentedControl";
 import type { City } from "@/lib/types";
+
+export interface PeriodFilter {
+  days: number;
+  cityId?: number;
+}
 
 interface Props {
   cities: City[];
-  onChange?: (f: { days: number; cityId?: number }) => void;
+  value: PeriodFilter;
+  onChange: (f: PeriodFilter) => void;
 }
 
 const DAY_PRESETS = [
-  { label: "Hoje", days: 1 },
-  { label: "7 dias", days: 7 },
-  { label: "30 dias", days: 30 },
-  { label: "90 dias", days: 90 },
-  { label: "12 meses", days: 365 },
+  { label: "Hoje", value: 1 },
+  { label: "7 dias", value: 7 },
+  { label: "30 dias", value: 30 },
+  { label: "90 dias", value: 90 },
+  { label: "12 meses", value: 365 },
 ];
 
-export default function FiltersBar({ cities, onChange }: Props) {
-  const [days, setDays] = useState(30);
-  const [cityId, setCityId] = useState<number | undefined>(undefined);
-
-  function emit(nextDays = days, nextCity = cityId) {
-    onChange?.({ days: nextDays, cityId: nextCity });
-  }
-
+/** Período e cidade. O estado mora na página, que é quem busca os dados. */
+export default function FiltersBar({ cities, value, onChange }: Props) {
   return (
-    <div className="card p-3 flex flex-wrap items-center gap-3">
-      <div className="flex items-center gap-1 text-xs text-ink-muted">
-        <Filter size={13} /> Período
+    <div className="flex max-w-full flex-wrap items-end gap-x-4 gap-y-3">
+      <div className="max-w-full">
+        <SegmentedControl
+          label="Período"
+          options={DAY_PRESETS}
+          value={value.days}
+          onChange={(days) => onChange({ ...value, days })}
+        />
+        <p className="mt-1 text-sm text-ink-muted">
+          {formatAbsoluteWindow(value.days)}
+        </p>
       </div>
-      <div className="flex flex-wrap gap-1">
-        {DAY_PRESETS.map((p) => (
-          <button
-            key={p.label}
-            className={`px-3 py-1.5 text-xs rounded-md border ${
-              days === p.days
-                ? "bg-brand/15 border-brand/40 text-brand"
-                : "border-bg-border text-ink-muted hover:text-ink"
-            }`}
-            onClick={() => {
-              setDays(p.days);
-              emit(p.days, cityId);
-            }}
+
+      {cities.length > 1 && (
+        <label className="block w-full sm:w-56">
+          <span className="sr-only">Cidade</span>
+          <select
+            className="input"
+            value={value.cityId ?? ""}
+            onChange={(e) =>
+              onChange({
+                ...value,
+                cityId: e.target.value ? Number(e.target.value) : undefined,
+              })
+            }
           >
-            {p.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="mx-2 h-6 w-px bg-bg-border" />
-
-      <div className="flex items-center gap-1 text-xs text-ink-muted">
-        <Building2 size={13} /> Cidade
-      </div>
-      <select
-        className="bg-bg-elevated border border-bg-border rounded-md px-2 py-1.5 text-xs text-ink outline-none"
-        value={cityId ?? ""}
-        onChange={(e) => {
-          const v = e.target.value ? Number(e.target.value) : undefined;
-          setCityId(v);
-          emit(days, v);
-        }}
-      >
-        <option value="">Todas as cidades</option>
-        {cities.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-            {c.camera_count ? ` · ${c.camera_count} câm.` : ""}
-          </option>
-        ))}
-      </select>
-
-      <div className="ml-auto flex items-center gap-1 text-xs text-ink-muted">
-        <Calendar size={13} /> referência: últimos {days} dia{days > 1 ? "s" : ""}
-      </div>
+            <option value="">Todas as cidades</option>
+            {cities.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <span className="mt-1 block text-xs text-ink-soft">Cidade</span>
+        </label>
+      )}
     </div>
   );
+}
+
+/** Janela absoluta do período: "11 out – 09 nov". */
+function formatAbsoluteWindow(days: number): string {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(end.getDate() - Math.max(1, days - 1));
+  const fmt = (d: Date) =>
+    d
+      .toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "short",
+        year: days > 300 ? "numeric" : undefined,
+      })
+      .replace(/\./g, "")
+      .replace(/ de /g, " ");
+  if (days === 1) return fmt(end);
+  return `${fmt(start)} – ${fmt(end)}`;
 }

@@ -1,21 +1,6 @@
 "use client";
 
-import {
-  Bike,
-  Building2,
-  Bus,
-  Car,
-  Loader2,
-  MapPin,
-  Package,
-  Play,
-  PlayCircle,
-  Radio,
-  Save,
-  Square,
-  Truck,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Save } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
@@ -29,21 +14,22 @@ import {
   stopLive,
   updateCamera,
 } from "@/lib/api";
+import LiveCameraSwitcher from "@/components/LiveCameraSwitcher";
+import LiveCameraWall from "@/components/LiveCameraWall";
+import LiveActiveStreamsSheet from "@/components/LiveActiveStreamsSheet";
+import LiveCountSheet, { formatLiveFps } from "@/components/LiveCountSheet";
+import LiveStreamViewport from "@/components/LiveStreamViewport";
+import PageHeader from "@/components/PageHeader";
+import SegmentedControl from "@/components/SegmentedControl";
+import Sheet from "@/components/Sheet";
 import type { Camera, City, LiveStatus } from "@/lib/types";
-import { formatNumber } from "@/lib/utils";
 
-const TYPE_META: Record<string, { label: string; icon: LucideIcon }> = {
-  car: { label: "Carros", icon: Car },
-  motorcycle: { label: "Motos", icon: Bike },
-  bus: { label: "Ônibus", icon: Bus },
-  truck: { label: "Caminhões", icon: Truck },
-  bicycle: { label: "Bicicletas", icon: Bike },
-  van: { label: "Vans", icon: Package },
-  other: { label: "Outros", icon: Package },
-};
+const SOURCE_PLACEHOLDER = "rtsp://, https:// ou 0";
 
-const DEFAULT_SOURCE_HINT =
-  "https://www.youtube.com/watch?v=... | rtsp://... | http://.../stream.m3u8 | 0 (webcam)";
+// A API devolve a mensagem crua; a tela diz o que falhou e o que fazer.
+function failure(what: string, e: any, next: string): string {
+  return `Não foi possível ${what}: ${e?.message ?? String(e)}. ${next}`;
+}
 
 export default function LivePage() {
   const [cameras, setCameras] = useState<Camera[]>([]);
@@ -55,6 +41,7 @@ export default function LivePage() {
   const [busy, setBusy] = useState(false);
   const [startingAll, setStartingAll] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [view, setView] = useState<"single" | "wall">("single");
   const [imgBust, setImgBust] = useState(0); // força o browser a reabrir o MJPEG
 
   // Carrega câmeras e cidades uma vez
@@ -68,7 +55,9 @@ export default function LivePage() {
           if (cs[0].stream_url) setSource(cs[0].stream_url);
         }
       })
-      .catch((e) => setMsg(`Erro carregando câmeras: ${e.message ?? e}`));
+      .catch((e) =>
+        setMsg(failure("carregar as câmeras", e, "Recarregue a página."))
+      );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -120,7 +109,9 @@ export default function LivePage() {
   async function handleStart() {
     if (cameraId === null) return;
     if (!source.trim()) {
-      setMsg("Informe uma fonte (URL ou device id).");
+      setMsg(
+        "Informe a fonte antes de iniciar: um endereço de vídeo ou o número do dispositivo."
+      );
       return;
     }
     setBusy(true);
@@ -129,9 +120,11 @@ export default function LivePage() {
       const s = await startLive(cameraId, source.trim());
       setStatus(s);
       setImgBust((n) => n + 1);
-      setMsg("Stream iniciado — aguarde alguns segundos pelos primeiros frames.");
+      setMsg(
+        "Transmissão iniciada. Os primeiros quadros levam alguns segundos para aparecer."
+      );
     } catch (e: any) {
-      setMsg(e?.message ?? String(e));
+      setMsg(failure("iniciar a transmissão", e, "Confira a fonte e tente de novo."));
     } finally {
       setBusy(false);
     }
@@ -144,9 +137,9 @@ export default function LivePage() {
     try {
       const s = await stopLive(cameraId);
       setStatus(s);
-      setMsg("Stream encerrado.");
+      setMsg("Transmissão encerrada.");
     } catch (e: any) {
-      setMsg(e?.message ?? String(e));
+      setMsg(failure("parar a transmissão", e, "Tente de novo."));
     } finally {
       setBusy(false);
     }
@@ -159,9 +152,9 @@ export default function LivePage() {
     try {
       const updated = await updateCamera(cameraId, { stream_url: source.trim() });
       setCameras((cs) => cs.map((c) => (c.id === updated.id ? updated : c)));
-      setMsg("URL salva como padrão desta câmera.");
+      setMsg("Fonte salva como padrão desta câmera.");
     } catch (e: any) {
-      setMsg(e?.message ?? String(e));
+      setMsg(failure("salvar a fonte", e, "Tente de novo."));
     } finally {
       setBusy(false);
     }
@@ -177,7 +170,7 @@ export default function LivePage() {
     );
     if (targets.length === 0) {
       setMsg(
-        "Nenhuma câmera pronta pra iniciar — salve uma URL padrão em cada câmera primeiro."
+        "Nenhuma câmera para iniciar: as que têm fonte salva já estão transmitindo, ou nenhuma tem fonte salva."
       );
       return;
     }
@@ -190,8 +183,10 @@ export default function LivePage() {
     const failed = results.length - ok;
     setMsg(
       failed === 0
-        ? `${ok} stream(s) iniciado(s).`
-        : `${ok} iniciado(s), ${failed} falhou(ram). Veja o log do servidor.`
+        ? ok === 1
+          ? "1 transmissão iniciada."
+          : `${ok} transmissões iniciadas.`
+        : `Iniciadas: ${ok}. Não iniciaram: ${failed}. Confira a fonte dessas câmeras e o registro do servidor.`
     );
     setStartingAll(false);
     try {
@@ -201,7 +196,7 @@ export default function LivePage() {
     }
   }
 
-  // Memoized: lookup de cidade por camera_id (para exibir "CAM-01 · São Paulo")
+  // Memoized: lookup de cidade por camera_id (para exibir a cidade ao lado do nome)
   const cityByCameraId = useMemo(() => {
     const cityMap = new Map(cities.map((c) => [c.id, c]));
     const out = new Map<number, City>();
@@ -213,7 +208,6 @@ export default function LivePage() {
   }, [cameras, cities]);
 
   const selectedCamera = cameras.find((c) => c.id === cameraId);
-  const selectedCity = cameraId !== null ? cityByCameraId.get(cameraId) : undefined;
 
   async function handleStopFromList(camId: number) {
     try {
@@ -224,7 +218,7 @@ export default function LivePage() {
         )
       );
     } catch (e: any) {
-      setMsg(e?.message ?? String(e));
+      setMsg(failure("parar a transmissão", e, "Tente de novo."));
     }
   }
 
@@ -234,310 +228,162 @@ export default function LivePage() {
     [status?.by_type]
   );
 
+  const runningStreams = active.filter((s) => s.running);
+  // O mural só faz sentido com mais de uma transmissão no ar.
+  const wallOpen = view === "wall" && runningStreams.length > 1;
+  const runningIds = new Set(runningStreams.map((s) => s.camera_id));
+
   return (
-    <div className="space-y-6">
-      <header>
-        <div className="flex items-center gap-2 text-brand text-xs uppercase tracking-wider">
-          <Radio size={14} />
-          Nível 3 — overlay ao vivo
-        </div>
-        <h1 className="text-2xl font-bold mt-1">Monitoramento ao vivo</h1>
-        <p className="text-sm text-ink-muted mt-1">
-          Conecta a uma câmera (RTSP) ou live stream (YouTube/HLS), roda YOLOv8
-          + tracking sobre o vídeo em tempo real e transmite os frames anotados
-          aqui pelo navegador.
-        </p>
-      </header>
+    <div className="space-y-10">
+      <PageHeader
+        title="Ao vivo"
+        description="Vídeo da câmera com as detecções marcadas e a contagem em tempo real."
+      />
 
       {cameras.length === 0 ? (
-        <div className="card p-8 text-center text-sm text-ink-muted">
-          Nenhuma câmera cadastrada.{" "}
-          <Link href="/cameras" className="text-brand hover:underline">
-            Cadastre uma em /cameras
-          </Link>{" "}
-          para começar.
-        </div>
+        <Sheet title="Nenhuma câmera cadastrada">
+          <p className="max-w-[60ch] text-ink-muted">
+            A transmissão ao vivo precisa de uma câmera para registrar as
+            contagens. Cadastre a primeira na tela Câmeras.
+          </p>
+          <Link href="/cameras" className="btn-primary mt-4">
+            Câmeras
+          </Link>
+        </Sheet>
       ) : (
-        <section className="card p-5">
-          <div className="grid grid-cols-1 md:grid-cols-[260px_1fr_auto] gap-3 items-end">
-            <div>
-              <label className="block text-xs uppercase tracking-wider text-ink-muted mb-1">
-                Câmera
-              </label>
-              <select
-                className="w-full bg-bg-elevated border border-bg-border rounded-md px-2 py-1.5 text-sm text-ink outline-none"
-                value={cameraId ?? ""}
-                onChange={(e) => setCameraId(Number(e.target.value))}
+        <>
+          {runningStreams.length > 1 && (
+            <SegmentedControl
+              label="Exibição"
+              options={[
+                { value: "single", label: "Uma câmera" },
+                { value: "wall", label: "Todas as câmeras" },
+              ]}
+              value={view}
+              onChange={setView}
+            />
+          )}
+
+          {wallOpen ? (
+            <LiveCameraWall
+              streams={runningStreams}
+              cameras={cameras}
+              onOpen={(id) => {
+                setCameraId(id);
+                setView("single");
+              }}
+            />
+          ) : (
+            <>
+              <LiveCameraSwitcher
+                cameras={cameras}
+                runningIds={runningIds}
+                cityByCameraId={cityByCameraId}
+                cameraId={cameraId}
+                onChange={setCameraId}
+              />
+
+          <Sheet
+            title={
+              selectedCamera
+                ? `Fonte de ${selectedCamera.name}`
+                : "Fonte da transmissão"
+            }
+          >
+            <div className="grid grid-cols-1 items-end gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+              <div>
+                <label
+                  htmlFor="live-source"
+                  className="mb-1 block text-sm font-medium"
+                >
+                  Fonte do vídeo
+                </label>
+                <input
+                  id="live-source"
+                  type="text"
+                  className="input"
+                  placeholder={SOURCE_PLACEHOLDER}
+                  autoComplete="off"
+                  spellCheck={false}
+                  aria-describedby="live-source-hint"
+                  value={source}
+                  onChange={(e) => setSource(e.target.value)}
+                />
+              </div>
+              <button
+                type="button"
+                className="btn"
+                onClick={handleSaveUrl}
+                disabled={busy || cameraId === null || !source.trim()}
+                title="Grava a fonte atual como padrão desta câmera"
               >
-                {cameras.map((c) => {
-                  const city = cityByCameraId.get(c.id);
-                  const tag = city ? city.name : "sem cidade";
-                  return (
-                    <option key={c.id} value={c.id}>
-                      {c.name} · {tag}
-                    </option>
-                  );
-                })}
-              </select>
-              {selectedCamera && (
-                <div className="mt-1 text-xs text-ink-muted flex flex-wrap items-center gap-x-2">
-                  <span className="inline-flex items-center gap-1">
-                    <Building2 size={12} />
-                    {selectedCity?.name ?? "—"}
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <MapPin size={12} />
-                    {selectedCamera.latitude.toFixed(4)},{" "}
-                    {selectedCamera.longitude.toFixed(4)}
-                  </span>
-                </div>
-              )}
+                <Save size={16} aria-hidden />
+                Salvar fonte na câmera
+              </button>
             </div>
-            <div>
-              <label className="block text-xs uppercase tracking-wider text-ink-muted mb-1">
-                Fonte
-              </label>
-              <input
-                type="text"
-                className="w-full bg-bg-elevated border border-bg-border rounded-md px-2 py-1.5 text-sm text-ink outline-none font-mono"
-                placeholder={DEFAULT_SOURCE_HINT}
-                value={source}
-                onChange={(e) => setSource(e.target.value)}
+            <p id="live-source-hint" className="mt-2 text-sm text-ink-muted">
+              Aceita endereço RTSP, link do YouTube, lista HLS (.m3u8) ou o
+              número do dispositivo, como 0 para a webcam.
+            </p>
+
+            {msg && (
+              <p role="status" className="mt-4 text-sm font-medium">
+                {msg}
+              </p>
+            )}
+            {status?.using_fallback_detector && (
+              <p className="mt-4 text-sm text-warning">
+                Atenção: detector simulado em uso, porque o pacote ultralytics
+                não está instalado no servidor. As caixas de detecção desta
+                transmissão são aleatórias.
+              </p>
+            )}
+            {status?.error && (
+              <p role="alert" className="alert-error mt-4 text-sm">
+                O processamento do vídeo relatou um erro: {status.error}.
+                Confira a fonte e inicie de novo.
+              </p>
+            )}
+          </Sheet>
+
+          <div className="grid grid-cols-1 gap-x-8 gap-y-10 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+              <LiveStreamViewport
+                cameraName={selectedCamera?.name}
+                hasCamera={cameraId !== null}
+                running={running}
+                streamSrc={
+                  cameraId !== null
+                    ? `${liveMjpegUrl(cameraId)}?t=${imgBust}`
+                    : null
+                }
+                streamKey={`${cameraId}-${imgBust}`}
+                fpsLabel={status?.fps_real ? formatLiveFps(status.fps_real) : null}
+                busy={busy}
+                onStart={handleStart}
+                onStop={handleStop}
               />
             </div>
-            <div className="flex gap-2">
-              {!running ? (
-                <button
-                  onClick={handleStart}
-                  disabled={busy || cameraId === null}
-                  className="inline-flex items-center gap-1.5 bg-brand hover:bg-brand-700 text-bg font-semibold rounded-md px-3 py-1.5 text-sm disabled:opacity-50"
-                >
-                  {busy ? (
-                    <Loader2 size={14} className="animate-spin" />
-                  ) : (
-                    <Play size={14} />
-                  )}
-                  Iniciar
-                </button>
-              ) : (
-                <button
-                  onClick={handleStop}
-                  disabled={busy}
-                  className="inline-flex items-center gap-1.5 bg-negative/20 border border-negative/40 text-negative hover:bg-negative/30 rounded-md px-3 py-1.5 text-sm font-semibold disabled:opacity-50"
-                >
-                  {busy ? (
-                    <Loader2 size={14} className="animate-spin" />
-                  ) : (
-                    <Square size={14} />
-                  )}
-                  Parar
-                </button>
-              )}
-            </div>
+            <LiveCountSheet
+              status={status}
+              sortedTypes={sortedTypes}
+              cameraName={selectedCamera?.name}
+            />
           </div>
 
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              onClick={handleSaveUrl}
-              disabled={busy || cameraId === null || !source.trim()}
-              title="Grava a URL atual como fonte padrão desta câmera"
-              className="inline-flex items-center gap-1.5 bg-bg-elevated border border-bg-border hover:border-brand text-ink-muted hover:text-ink rounded-md px-3 py-1.5 text-xs disabled:opacity-50"
-            >
-              <Save size={13} />
-              Salvar URL nesta câmera
-            </button>
-            <button
-              onClick={handleStartAll}
-              disabled={startingAll}
-              title="Inicia uma stream para cada câmera que tem URL padrão salva"
-              className="inline-flex items-center gap-1.5 bg-bg-elevated border border-bg-border hover:border-brand text-ink-muted hover:text-ink rounded-md px-3 py-1.5 text-xs disabled:opacity-50"
-            >
-              {startingAll ? (
-                <Loader2 size={13} className="animate-spin" />
-              ) : (
-                <PlayCircle size={13} />
-              )}
-              Iniciar todas as câmeras com URL salva
-            </button>
-          </div>
-
-          {msg && (
-            <div className="mt-3 text-xs text-ink-muted">{msg}</div>
+            </>
           )}
-          {status?.using_fallback_detector && (
-            <div className="mt-3 text-xs text-warning">
-              Atenção: detector simulado ativo (ultralytics não está instalado no
-              backend). Os boxes serão aleatórios.
-            </div>
-          )}
-          {status?.error && (
-            <div className="mt-3 text-xs text-negative">
-              Erro no worker: {status.error}
-            </div>
-          )}
-        </section>
-      )}
 
-      {cameras.length > 0 && (
-        <>
-          <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 card p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold">Stream anotado</h3>
-                {running && (
-                  <span className="inline-flex items-center gap-1.5 text-xs text-positive">
-                    <span className="h-2 w-2 rounded-full bg-positive animate-pulse" />
-                    AO VIVO
-                  </span>
-                )}
-              </div>
-              {cameraId !== null && running ? (
-                <img
-                  key={`${cameraId}-${imgBust}`}
-                  src={`${liveMjpegUrl(cameraId)}?t=${imgBust}`}
-                  alt="Stream ao vivo"
-                  className="w-full rounded-lg bg-black"
-                />
-              ) : (
-                <div className="aspect-video rounded-lg border border-dashed border-bg-border grid place-items-center text-sm text-ink-muted">
-                  {cameraId === null
-                    ? "Selecione uma câmera acima."
-                    : "Stream não iniciado. Informe uma fonte e clique em Iniciar."}
-                </div>
-              )}
-              <p className="text-xs text-ink-muted mt-2">
-                O player é um MJPEG direto do backend — reabra a página se a
-                conexão cair.
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              <div className="card p-5">
-                <div className="text-xs uppercase tracking-wider text-ink-muted">
-                  Contados ao vivo
-                </div>
-                <div className="text-4xl font-bold mt-1">
-                  {formatNumber(status?.total_counted ?? 0)}
-                </div>
-                <div className="text-xs text-ink-muted mt-1">
-                  {status?.fps_real ? `${status.fps_real.toFixed(1)} fps` : "—"} ·{" "}
-                  {status?.frames_processed ?? 0} frames ·{" "}
-                  {status?.uptime_s ? `${Math.round(status.uptime_s)}s uptime` : "—"}
-                </div>
-              </div>
-
-              <div className="card p-5">
-                <h3 className="text-sm font-semibold mb-3">Por tipo</h3>
-                <ul className="space-y-2">
-                  {sortedTypes.length === 0 && (
-                    <li className="text-xs text-ink-muted">
-                      Nenhum veículo cruzou a linha ainda.
-                    </li>
-                  )}
-                  {sortedTypes.map(([type, count]) => {
-                    const meta = TYPE_META[type] ?? { label: type, icon: Package };
-                    const Icon = meta.icon;
-                    const total = status?.total_counted ?? 0;
-                    const pct = total > 0 ? (count / total) * 100 : 0;
-                    return (
-                      <li key={type} className="text-sm">
-                        <div className="flex items-center gap-2">
-                          <Icon size={14} />
-                          <span className="flex-1">{meta.label}</span>
-                          <span className="font-semibold">
-                            {formatNumber(count)}
-                          </span>
-                          <span className="text-xs text-ink-muted w-10 text-right">
-                            {pct.toFixed(0)}%
-                          </span>
-                        </div>
-                        <div className="mt-1 h-1.5 bg-bg-elevated rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-brand"
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-
-              {status && (
-                <div className="card p-4 text-xs text-ink-muted space-y-1">
-                  <div>
-                    <span className="uppercase tracking-wider">Fonte:</span>{" "}
-                    <span className="text-ink break-all">{status.source}</span>
-                  </div>
-                  <div>
-                    <span className="uppercase tracking-wider">Resolvido:</span>{" "}
-                    <span className="text-ink break-all">
-                      {status.resolved_source}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </section>
-
-          <section className="card p-5">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold">Ativas agora</h3>
-              <span className="text-xs text-ink-muted">
-                {active.filter((s) => s.running).length} rodando
-              </span>
-            </div>
-            {active.filter((s) => s.running).length === 0 ? (
-              <p className="text-xs text-ink-muted">
-                Nenhuma stream ativa. Inicie uma câmera acima ou use "Iniciar todas".
-              </p>
-            ) : (
-              <ul className="divide-y divide-bg-border">
-                {active
-                  .filter((s) => s.running)
-                  .map((s) => {
-                    const cam = cameras.find((c) => c.id === s.camera_id);
-                    const city = cityByCameraId.get(s.camera_id);
-                    return (
-                      <li
-                        key={s.camera_id}
-                        className="py-2 flex items-center gap-3 text-sm"
-                      >
-                        <span className="h-2 w-2 rounded-full bg-positive animate-pulse shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium truncate">
-                            {cam?.name ?? `cam ${s.camera_id}`}
-                            {city && (
-                              <span className="text-ink-muted font-normal">
-                                {" · "}
-                                {city.name}
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-xs text-ink-muted truncate">
-                            {s.fps_real.toFixed(1)} fps ·{" "}
-                            {formatNumber(s.total_counted)} veículos ·{" "}
-                            {Math.round(s.uptime_s)}s
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => setCameraId(s.camera_id)}
-                          className="text-xs text-ink-muted hover:text-ink underline-offset-2 hover:underline"
-                        >
-                          abrir
-                        </button>
-                        <button
-                          onClick={() => handleStopFromList(s.camera_id)}
-                          className="text-xs text-negative hover:underline underline-offset-2"
-                        >
-                          parar
-                        </button>
-                      </li>
-                    );
-                  })}
-              </ul>
-            )}
-          </section>
+          <LiveActiveStreamsSheet
+            streams={runningStreams}
+            cameras={cameras}
+            cityByCameraId={cityByCameraId}
+            openCameraId={cameraId}
+            startingAll={startingAll}
+            onStartAll={handleStartAll}
+            onOpen={setCameraId}
+            onStop={handleStopFromList}
+          />
         </>
       )}
     </div>

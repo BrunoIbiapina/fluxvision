@@ -2,75 +2,116 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  Activity,
-  AlertTriangle,
-  BarChart3,
-  Camera,
-  Flame,
-  LayoutDashboard,
-  MapPin,
-  Radio,
-  UploadCloud,
-} from "lucide-react";
+import { Menu, X } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
-const NAV = [
-  { href: "/", label: "Overview", icon: LayoutDashboard },
-  { href: "/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/comparison", label: "Comparativo", icon: Activity },
-  { href: "/heatmap", label: "Mapa de calor", icon: Flame },
-  { href: "/alerts", label: "Alertas", icon: AlertTriangle },
-  { href: "/cameras", label: "Câmeras", icon: Camera },
-  { href: "/upload", label: "Upload", icon: UploadCloud },
-  { href: "/live", label: "Ao vivo", icon: Radio },
+const NAV_GROUPS = [
+  {
+    title: "Leitura",
+    items: [
+      { href: "/", label: "Visão geral" },
+      { href: "/analytics", label: "Séries" },
+      { href: "/comparison", label: "Comparativo" },
+      { href: "/heatmap", label: "Mapa de calor" },
+      { href: "/alerts", label: "Alertas" },
+    ],
+  },
+  {
+    title: "Captura",
+    items: [
+      { href: "/cameras", label: "Câmeras" },
+      { href: "/upload", label: "Enviar vídeo" },
+      { href: "/live", label: "Ao vivo" },
+    ],
+  },
 ];
 
+/**
+ * Trilho em verde de placa. No desktop fica fixo à esquerda; abaixo de 1024 px
+ * vira uma barra no topo com o botão que abre a navegação.
+ */
 export default function Sidebar() {
   const path = usePathname();
+  const [open, setOpen] = useState(false);
+
+  // Trocar de rota fecha o menu do celular.
+  useEffect(() => {
+    setOpen(false);
+  }, [path]);
+
   return (
-    <aside className="border-r border-bg-border bg-bg-subtle/80 backdrop-blur">
-      <div className="px-5 py-5 border-b border-bg-border flex items-center gap-2">
-        <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-brand to-brand-700 grid place-items-center text-bg font-black">
-          F
-        </div>
-        <div>
-          <div className="font-semibold leading-tight">FluxVision</div>
-          <div className="text-[11px] text-ink-muted leading-tight">
-            Urban flow intelligence
-          </div>
-        </div>
-      </div>
-
-      <nav className="p-3 space-y-1">
-        {NAV.map(({ href, label, icon: Icon }) => {
-          const active = href === "/" ? path === "/" : path?.startsWith(href);
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={cn("nav-link", active && "active")}
-            >
-              <Icon size={16} />
-              {label}
-            </Link>
-          );
-        })}
-      </nav>
-
-      <div className="px-3 mt-auto pt-6">
-        <div className="card p-3 text-[11px] text-ink-muted leading-relaxed">
-          <div className="flex items-center gap-1 text-ink mb-1">
-            <MapPin size={12} className="text-brand" />
-            <span className="font-semibold">Ambiente</span>
-          </div>
-          Dashboard conectado à API em{" "}
-          <span className="font-mono text-ink">
-            {process.env.NEXT_PUBLIC_API_BASE_URL || "localhost:8000"}
+    <aside className="bg-rail text-rail-ink lg:sticky lg:top-0 lg:h-screen lg:overflow-y-auto">
+      <div className="flex items-center justify-between px-4 lg:block lg:px-5 lg:pb-5 lg:pt-6">
+        <Link href="/" className="flex min-h-14 items-center gap-2.5 lg:min-h-0">
+          <FluxMark />
+          <span className="font-display text-2xl font-bold leading-none">
+            FluxVision
           </span>
-        </div>
+        </Link>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-controls="navegacao-principal"
+          className="inline-flex h-11 items-center gap-2 rounded-md px-3 text-sm font-semibold hover:bg-rail-ink/10 lg:hidden"
+        >
+          {open ? <X size={18} aria-hidden /> : <Menu size={18} aria-hidden />}
+          {open ? "Fechar" : "Menu"}
+        </button>
       </div>
+
+      <nav
+        id="navegacao-principal"
+        aria-label="Principal"
+        className={cn(
+          "border-t border-rail-rule px-3 pb-4 lg:block lg:border-t-0 lg:pb-6",
+          open ? "block" : "hidden"
+        )}
+      >
+        {NAV_GROUPS.map((group) => (
+          <div key={group.title} className="mt-4 first:mt-3 lg:first:mt-0">
+            <div className="px-3 pb-1 text-xs font-semibold text-rail-muted">
+              {group.title}
+            </div>
+            <ul>
+              {group.items.map(({ href, label }) => {
+                const active =
+                  href === "/" ? path === "/" : path?.startsWith(href);
+                return (
+                  <li key={href}>
+                    <Link
+                      href={href}
+                      aria-current={active ? "page" : undefined}
+                      className={cn(
+                        "flex min-h-11 items-center rounded-md px-3 text-[15px] font-semibold transition-colors lg:min-h-10",
+                        active
+                          ? "bg-rail-ink text-rail"
+                          : "text-rail-ink hover:bg-rail-ink/10"
+                      )}
+                    >
+                      {label}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </nav>
     </aside>
+  );
+}
+
+/** Marca: um trecho de pista visto de cima, com o eixo tracejado. */
+function FluxMark() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
+      <rect x="1" y="5" width="24" height="16" rx="2" fill="rgb(var(--rail-ink))" />
+      <rect x="4" y="12" width="5" height="2" fill="rgb(var(--lane))" />
+      <rect x="11" y="12" width="5" height="2" fill="rgb(var(--lane))" />
+      <rect x="18" y="12" width="4" height="2" fill="rgb(var(--lane))" />
+    </svg>
   );
 }

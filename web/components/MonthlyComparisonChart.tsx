@@ -11,6 +11,16 @@ import {
   YAxis,
 } from "recharts";
 
+import Sheet from "@/components/Sheet";
+import {
+  CHART_AXIS,
+  CHART_BRAND,
+  CHART_FONT_SIZE,
+  CHART_GRID,
+  CHART_INK,
+  CHART_TOOLTIP_LABEL_STYLE,
+  CHART_TOOLTIP_STYLE,
+} from "@/lib/chartTheme";
 import type { TimeseriesPoint } from "@/lib/types";
 import { formatNumber } from "@/lib/utils";
 
@@ -45,40 +55,39 @@ export default function MonthlyComparisonChart({ data, height = 320 }: Props) {
   });
 
   const years = Object.keys(byYear).sort();
-  const colors = ["#38bdf8", "#34d399", "#fbbf24", "#f472b6"];
+  // Ano mais recente em tinta cheia; os anteriores em verde e em tracejado.
+  const strokes = [
+    { stroke: CHART_INK, dash: undefined },
+    { stroke: CHART_BRAND, dash: undefined },
+    { stroke: CHART_INK, dash: "6 4" },
+    { stroke: CHART_BRAND, dash: "6 4" },
+  ];
+  const newestFirst = [...years].reverse();
 
   return (
-    <div className="card p-5">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="text-sm font-semibold">Comparativo mensal por ano</h3>
-          <p className="text-xs text-ink-muted">
-            Tendência ano a ano, útil para medir sazonalidade
-          </p>
-        </div>
-      </div>
+    <Sheet
+      title="Comparativo mensal por ano"
+      note="Veículos por mês, uma linha por ano"
+    >
       <ResponsiveContainer width="100%" height={height}>
         <LineChart data={merged} margin={{ left: -10, right: 10 }}>
-          <CartesianGrid stroke="#1e2a47" strokeDasharray="3 3" />
-          <XAxis dataKey="month" stroke="#64748b" fontSize={11} />
-          <YAxis stroke="#64748b" fontSize={11} allowDecimals={false} />
+          <CartesianGrid stroke={CHART_GRID} vertical={false} />
+          <XAxis dataKey="month" stroke={CHART_AXIS} fontSize={CHART_FONT_SIZE} tickLine={false} />
+          <YAxis stroke={CHART_AXIS} fontSize={CHART_FONT_SIZE} allowDecimals={false} tickLine={false} axisLine={false} tickFormatter={(v: number) => formatNumber(v)} />
           <Tooltip
-            contentStyle={{
-              background: "#121a2e",
-              border: "1px solid #1e2a47",
-              borderRadius: 8,
-              fontSize: 12,
-            }}
-            labelStyle={{ color: "#94a3b8" }}
+            contentStyle={CHART_TOOLTIP_STYLE}
+            labelStyle={CHART_TOOLTIP_LABEL_STYLE}
             formatter={(v: number) => formatNumber(v)}
           />
-          <Legend wrapperStyle={{ fontSize: 12 }} />
+          <Legend iconType="plainline" wrapperStyle={{ fontSize: 13 }} formatter={(value) => (<span style={{ color: "rgb(var(--ink-muted))" }}>{value}</span>)} />
           {years.map((y, i) => (
             <Line
               key={y}
               type="monotone"
               dataKey={y}
-              stroke={colors[i % colors.length]}
+              stroke={strokes[newestFirst.indexOf(y) % strokes.length].stroke}
+              strokeDasharray={strokes[newestFirst.indexOf(y) % strokes.length].dash}
+              isAnimationActive={false}
               strokeWidth={2}
               dot={{ r: 3 }}
               activeDot={{ r: 5 }}
@@ -87,6 +96,6 @@ export default function MonthlyComparisonChart({ data, height = 320 }: Props) {
           ))}
         </LineChart>
       </ResponsiveContainer>
-    </div>
+    </Sheet>
   );
 }

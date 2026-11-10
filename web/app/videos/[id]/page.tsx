@@ -3,17 +3,10 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import {
-  ArrowLeft,
-  Bike,
-  Bus,
-  Car,
-  Loader2,
-  Package,
-  Truck,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 
+import PageHeader from "@/components/PageHeader";
+import Sheet from "@/components/Sheet";
 import {
   annotatedVideoUrl,
   getVideo,
@@ -21,17 +14,21 @@ import {
   heatmapUrl,
 } from "@/lib/api";
 import type { Video, VideoProcessResult } from "@/lib/types";
-import { formatNumber } from "@/lib/utils";
+import { cn, formatNumber } from "@/lib/utils";
+import { DETECTED_TYPE_LABEL } from "@/lib/vehicleClasses";
+import { describeVideoStatus, formatVideoRecordedAt } from "@/lib/videoStatus";
 
-const TYPE_META: Record<string, { label: string; icon: LucideIcon }> = {
-  car: { label: "Carros", icon: Car },
-  motorcycle: { label: "Motos", icon: Bike },
-  bus: { label: "Ônibus", icon: Bus },
-  truck: { label: "Caminhões", icon: Truck },
-  bicycle: { label: "Bicicletas", icon: Bike },
-  van: { label: "Vans", icon: Package },
-  other: { label: "Outros", icon: Package },
-};
+const oneDecimal = (n: number) =>
+  n.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+function BackToUploadLink() {
+  return (
+    <Link href="/upload" className="btn-ghost -ml-2.5">
+      <ArrowLeft size={16} aria-hidden />
+      Enviar vídeo
+    </Link>
+  );
+}
 
 export default function VideoDetailPage() {
   const params = useParams<{ id: string }>();
@@ -63,171 +60,175 @@ export default function VideoDetailPage() {
   }, [id, video?.status]);
 
   if (!id || Number.isNaN(id)) {
-    return <div className="text-sm text-ink-muted">ID de vídeo inválido.</div>;
+    return (
+      <div className="space-y-4">
+        <BackToUploadLink />
+        <PageHeader
+          title="Vídeo não encontrado"
+          description="O endereço não traz um número de vídeo válido. Abra o vídeo pela lista da tela Enviar vídeo."
+        />
+      </div>
+    );
   }
 
   if (error) {
     return (
       <div className="space-y-4">
-        <Link
-          href="/upload"
-          className="inline-flex items-center gap-1 text-sm text-brand"
-        >
-          <ArrowLeft size={14} /> voltar
-        </Link>
-        <div className="card p-5 text-sm text-negative">{error}</div>
+        <BackToUploadLink />
+        <p role="alert" className="alert-error">
+          Não foi possível carregar o vídeo {id}: {error}. Recarregue a página
+          ou abra o vídeo de novo pela tela Enviar vídeo.
+        </p>
       </div>
     );
   }
 
   if (!video || !result) {
     return (
-      <div className="flex items-center gap-2 text-sm text-ink-muted">
-        <Loader2 size={14} className="animate-spin" /> carregando vídeo…
-      </div>
+      <p role="status" className="flex items-center gap-2 text-ink-muted">
+        <Loader2 size={16} className="animate-spin" aria-hidden />
+        Carregando o vídeo…
+      </p>
     );
   }
 
   const processing = video.status !== "done";
+  const failed = video.status === "failed";
+  const status = describeVideoStatus(video.status);
   const sortedTypes = Object.entries(result.by_type).sort((a, b) => b[1] - a[1]);
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/upload"
-        className="inline-flex items-center gap-1 text-xs text-ink-muted hover:text-ink"
-      >
-        <ArrowLeft size={14} /> todos os vídeos
-      </Link>
+      <div className="space-y-2">
+        <BackToUploadLink />
+        <PageHeader
+          title={`Vídeo ${video.id}`}
+          description={
+            <>
+              <span className="block font-semibold text-ink [overflow-wrap:anywhere]">
+                {video.filename}
+              </span>
+              <span className="block">
+                Câmera {video.camera_id}, gravado em{" "}
+                <span className="tabular-nums">
+                  {formatVideoRecordedAt(video.recorded_at)}
+                </span>
+              </span>
+              <span className="block tabular-nums">
+                {video.width}×{video.height} a {oneDecimal(video.fps)} quadros
+                por segundo
+              </span>
+            </>
+          }
+          actions={
+            <p className={cn("font-semibold", status.tone)}>
+              <span className="sr-only">Estado: </span>
+              {status.label}
+            </p>
+          }
+        />
+      </div>
 
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold truncate max-w-[70ch]">
-            {video.filename}
-          </h1>
-          <p className="text-sm text-ink-muted mt-1">
-            Câmera {video.camera_id} ·{" "}
-            {new Date(video.recorded_at).toLocaleString("pt-BR")} ·{" "}
-            {video.width}×{video.height} @ {video.fps.toFixed(1)} fps
+      {processing &&
+        (failed ? (
+          <p role="alert" className="alert-error">
+            O processamento deste vídeo falhou e não há contagem. Envie o
+            arquivo de novo pela tela Enviar vídeo.
           </p>
-        </div>
-        <span
-          className={`chip ${
-            video.status === "done"
-              ? "text-positive border-positive/40"
-              : video.status === "failed"
-              ? "text-negative border-negative/40"
-              : "text-warning border-warning/40"
-          }`}
-        >
-          {video.status}
-        </span>
-      </header>
+        ) : (
+          <p role="status" className="flex items-center gap-2 text-ink-muted">
+            <Loader2 size={16} className="shrink-0 animate-spin" aria-hidden />
+            {video.status === "pending"
+              ? "O vídeo está na fila. A contagem aparece aqui quando o processamento terminar."
+              : "Processando o vídeo. A contagem aparece aqui quando terminar."}
+          </p>
+        ))}
 
-      {processing && (
-        <div className="card p-4 flex items-center gap-2 text-sm text-ink-muted">
-          <Loader2 size={14} className="animate-spin text-brand" />
-          Processando vídeo… os resultados aparecem quando terminar.
-        </div>
-      )}
-
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 card p-4">
-          <h3 className="text-sm font-semibold mb-3">
-            Vídeo anotado pela IA
-          </h3>
+      <div className="grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-3">
+        <Sheet title="Vídeo anotado" className="lg:col-span-2">
           {result.annotated_url ? (
             <video
               key={result.annotated_url}
               controls
               playsInline
-              className="w-full rounded-lg bg-black"
+              className="aspect-video w-full bg-black object-contain"
               src={annotatedVideoUrl(video.id)}
             />
           ) : (
-            <div className="aspect-video rounded-lg border border-dashed border-bg-border grid place-items-center text-sm text-ink-muted">
-              {processing
-                ? "Aguardando fim do processamento…"
-                : "Vídeo anotado indisponível para este item."}
+            <div className="grid aspect-video place-items-center border border-dashed border-ink/50 px-4 text-center text-ink-muted">
+              {failed
+                ? "Sem vídeo anotado: o processamento falhou."
+                : processing
+                ? "O vídeo anotado aparece quando o processamento terminar."
+                : "Este vídeo não tem versão anotada."}
             </div>
           )}
-          <p className="text-xs text-ink-muted mt-2">
-            Bounding boxes, rótulo do tipo e ID do track desenhados em cada
-            frame. A linha branca é a linha virtual de contagem.
+          <p className="mt-3 max-w-[75ch] text-sm text-ink-muted">
+            Cada quadro traz a caixa de detecção, o tipo do veículo e o número
+            do rastreio. A linha branca é a linha virtual de contagem.
           </p>
-        </div>
+        </Sheet>
 
-        <div className="space-y-4">
-          <div className="card p-5">
-            <div className="text-xs uppercase tracking-wider text-ink-muted">
-              Veículos contados
-            </div>
-            <div className="text-4xl font-bold mt-1">
+        <Sheet title="Contagem">
+          <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span className="font-display text-5xl font-semibold leading-none tabular-nums">
               {formatNumber(result.total_vehicles)}
-            </div>
-            <div className="text-xs text-ink-muted mt-1">
-              em {result.duration_s.toFixed(1)}s de vídeo
-            </div>
-          </div>
+            </span>
+            <span className="text-lg font-bold">
+              {result.total_vehicles === 1 ? "veículo contado" : "veículos contados"}
+            </span>
+          </p>
+          <p className="mt-2 text-sm text-ink-muted">
+            em <span className="tabular-nums">{oneDecimal(result.duration_s)}</span>{" "}
+            segundos de vídeo
+          </p>
 
-          <div className="card p-5">
-            <h3 className="text-sm font-semibold mb-3">Por tipo de veículo</h3>
-            <ul className="space-y-2">
-              {sortedTypes.length === 0 && (
-                <li className="text-xs text-ink-muted">
-                  Nenhum veículo detectado.
-                </li>
-              )}
-              {sortedTypes.map(([type, count]) => {
-                const meta = TYPE_META[type] ?? {
-                  label: type,
-                  icon: Package,
-                };
-                const Icon = meta.icon;
-                const pct =
-                  result.total_vehicles > 0
-                    ? (count / result.total_vehicles) * 100
-                    : 0;
-                return (
-                  <li key={type} className="text-sm">
-                    <div className="flex items-center gap-2">
-                      <Icon size={14} />
-                      <span className="flex-1">{meta.label}</span>
-                      <span className="font-semibold">{formatNumber(count)}</span>
-                      <span className="text-xs text-ink-muted w-10 text-right">
-                        {pct.toFixed(0)}%
-                      </span>
-                    </div>
-                    <div className="mt-1 h-1.5 bg-bg-elevated rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-brand"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        </div>
-      </section>
+          {sortedTypes.length === 0 ? (
+            <p className="mt-4 border-t border-bg-border pt-4 text-ink-muted">
+              Nenhum veículo detectado.
+            </p>
+          ) : (
+            <table className="sheet-table mt-4">
+              <thead>
+                <tr>
+                  <th scope="col">Tipo</th>
+                  <th scope="col" className="!text-right">Contagem</th>
+                  <th scope="col" className="!text-right">Parte do total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedTypes.map(([type, count]) => {
+                  const pct =
+                    result.total_vehicles > 0
+                      ? (count / result.total_vehicles) * 100
+                      : 0;
+                  return (
+                    <tr key={type}>
+                      <td>{DETECTED_TYPE_LABEL[type] ?? type}</td>
+                      <td className="num font-semibold">{formatNumber(count)}</td>
+                      <td className="num text-ink-muted">{pct.toFixed(0)}%</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </Sheet>
+      </div>
 
       {result.heatmap_url && (
-        <section className="card p-4">
-          <h3 className="text-sm font-semibold mb-3">
-            Mapa de calor do vídeo
-          </h3>
+        <Sheet title="Mapa de calor do vídeo">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={heatmapUrl(video.id)}
-            alt="Heatmap"
-            className="w-full rounded-lg border border-bg-border"
+            alt={`Mapa de calor do vídeo ${video.id}`}
+            className="aspect-video w-full bg-black object-contain"
           />
-          <p className="text-xs text-ink-muted mt-2">
-            Regiões em vermelho concentraram mais tráfego durante o período
+          <p className="mt-3 max-w-[75ch] text-sm text-ink-muted">
+            As regiões em vermelho concentraram mais tráfego durante o trecho
             analisado.
           </p>
-        </section>
+        </Sheet>
       )}
     </div>
   );

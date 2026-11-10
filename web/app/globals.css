@@ -2,80 +2,272 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Tokens em canais RGB (ver tailwind.config.ts). O claro é o padrão; o escuro
+   entra pelo sistema ou pelo botão de tema, que grava data-theme no <html>. */
+:root {
+  color-scheme: light;
+  --bg: 255 255 255;
+  --bg-subtle: 241 243 242;
+  --bg-card: 255 255 255;
+  --bg-elevated: 236 239 238;
+  --bg-border: 196 203 200;
+  --ink: 18 23 26;
+  --ink-muted: 70 80 85;
+  --ink-soft: 94 105 110;
+  --brand: 11 107 69;
+  --brand-600: 10 94 61;
+  --brand-700: 8 77 50;
+  --brand-muted: 213 232 223;
+  --on-brand: 255 255 255;
+  --lane: 242 183 5;
+  --on-lane: 18 23 26;
+  --rail: 11 90 60;
+  --rail-ink: 255 255 255;
+  --rail-muted: 190 222 207;
+  --rail-rule: 46 122 92;
+  --positive: 11 107 69;
+  --warning: 133 85 0;
+  --negative: 176 36 28;
+  --critical: 176 36 28;
+  --shadow: 18 23 26;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: 17 21 23;
+  --bg-subtle: 22 27 30;
+  --bg-card: 27 33 36;
+  --bg-elevated: 36 43 47;
+  --bg-border: 58 68 73;
+  --ink: 233 236 235;
+  --ink-muted: 178 188 192;
+  --ink-soft: 146 158 163;
+  --brand: 84 200 146;
+  --brand-600: 68 180 128;
+  --brand-700: 56 158 112;
+  --brand-muted: 22 62 46;
+  --on-brand: 9 24 18;
+  --lane: 242 183 5;
+  --on-lane: 18 23 26;
+  --rail: 12 46 33;
+  --rail-ink: 240 246 243;
+  --rail-muted: 160 196 180;
+  --rail-rule: 32 78 59;
+  --positive: 84 200 146;
+  --warning: 242 183 5;
+  --negative: 255 138 128;
+  --critical: 255 120 108;
+  --shadow: 0 0 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: 17 21 23;
+    --bg-subtle: 22 27 30;
+    --bg-card: 27 33 36;
+    --bg-elevated: 36 43 47;
+    --bg-border: 58 68 73;
+    --ink: 233 236 235;
+    --ink-muted: 178 188 192;
+    --ink-soft: 146 158 163;
+    --brand: 84 200 146;
+    --brand-600: 68 180 128;
+    --brand-700: 56 158 112;
+    --brand-muted: 22 62 46;
+    --on-brand: 9 24 18;
+    --lane: 242 183 5;
+    --on-lane: 18 23 26;
+    --rail: 12 46 33;
+    --rail-ink: 240 246 243;
+    --rail-muted: 160 196 180;
+    --rail-rule: 32 78 59;
+    --positive: 84 200 146;
+    --warning: 242 183 5;
+    --negative: 255 138 128;
+    --critical: 255 120 108;
+    --shadow: 0 0 0;
+  }
+}
+
 @layer base {
-  html, body {
+  html,
+  body {
     height: 100%;
   }
   body {
     @apply bg-bg text-ink antialiased;
-    background-image:
-      radial-gradient(1200px 600px at 100% -10%, rgba(56,189,248,0.08), transparent 60%),
-      radial-gradient(900px 500px at -10% 110%, rgba(52,211,153,0.05), transparent 60%);
-    background-attachment: fixed;
+    font-size: 16px;
   }
   ::selection {
-    @apply bg-brand/30 text-ink;
+    background: rgb(var(--lane));
+    color: rgb(var(--on-lane));
+  }
+  :focus-visible {
+    outline: 2px solid rgb(var(--ink));
+    outline-offset: 2px;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  a {
+    text-underline-offset: 3px;
+  }
+  input,
+  select,
+  textarea {
+    caret-color: rgb(var(--brand));
   }
 }
 
 @layer components {
+  /* Superfície flutuante (diálogo, menu). Seção de página não usa caixa:
+     ver components/Sheet.tsx. */
   .card {
-    @apply rounded-xl border border-bg-border bg-bg-card shadow-card;
+    @apply rounded-lg border border-bg-border bg-bg-card;
   }
   .card-elevated {
-    @apply rounded-xl border border-bg-border bg-bg-elevated shadow-card;
+    @apply rounded-lg border border-bg-border bg-bg-elevated;
   }
+  /* Etiqueta de texto curta (categoria, janela de dados). */
   .chip {
-    @apply inline-flex items-center gap-1 rounded-full border border-bg-border
-           bg-bg-elevated px-2.5 py-1 text-xs font-medium text-ink-muted;
+    @apply inline-flex items-center gap-1 rounded-sm bg-bg-elevated
+           px-2 py-0.5 text-xs font-medium text-ink-muted;
   }
 
-  /* Botões reutilizáveis (tema escuro) */
   .btn {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-md border border-bg-border
-           bg-bg-elevated px-3 py-1.5 text-sm text-ink
-           hover:border-brand/40 hover:text-ink
-           disabled:opacity-50 disabled:cursor-not-allowed
-           transition-colors;
+    @apply inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md
+           border border-bg-border bg-bg-card px-3.5 text-sm font-semibold text-ink
+           hover:bg-bg-elevated
+           disabled:cursor-not-allowed disabled:opacity-50
+           transition-colors sm:min-h-9;
   }
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-md
-           bg-brand text-bg font-semibold px-3 py-1.5 text-sm
-           hover:bg-brand-700
-           disabled:opacity-50 disabled:cursor-not-allowed
-           transition-colors;
+    @apply inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md
+           border border-brand bg-brand px-3.5 text-sm font-semibold text-on-brand
+           hover:border-brand-700 hover:bg-brand-700
+           disabled:cursor-not-allowed disabled:opacity-50
+           transition-colors sm:min-h-9;
+  }
+  .btn-danger {
+    @apply inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md
+           border border-negative bg-bg-card px-3.5 text-sm font-semibold text-negative
+           hover:bg-negative hover:text-bg-card
+           disabled:cursor-not-allowed disabled:opacity-50
+           transition-colors sm:min-h-9;
   }
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-1 rounded-md
-           px-2 py-1 text-sm text-ink-muted
+    @apply inline-flex min-h-11 items-center justify-center gap-1 rounded-md
+           px-2.5 text-sm font-medium text-ink-muted
            hover:bg-bg-elevated hover:text-ink
-           disabled:opacity-50 disabled:cursor-not-allowed
-           transition-colors;
+           disabled:cursor-not-allowed disabled:opacity-50
+           transition-colors sm:min-h-9;
   }
 
-  /* Inputs / selects / textareas */
   .input {
-    @apply w-full rounded-md border border-bg-border bg-bg-card
-           px-3 py-1.5 text-sm text-ink placeholder:text-ink-soft
-           focus:outline-none focus:border-brand/60 focus:ring-1 focus:ring-brand/30
-           disabled:opacity-50;
+    @apply min-h-11 w-full rounded-md border border-bg-border bg-bg-card
+           px-3 text-sm text-ink placeholder:text-ink-soft
+           hover:border-ink-soft
+           focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink
+           disabled:opacity-50 sm:min-h-9;
+  }
+  textarea.input {
+    @apply py-2;
+  }
+  select.input {
+    @apply appearance-none bg-no-repeat pr-9;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235E696E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-position: right 0.6rem center;
   }
 
-  .nav-link {
-    @apply flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-ink-muted
-           hover:bg-bg-elevated hover:text-ink transition-colors;
+  /* Seletor segmentado: um contêiner, vários segmentos, sem divisórias. */
+  .segmented {
+    @apply inline-flex max-w-full gap-0.5 overflow-x-auto rounded-md bg-bg-elevated p-0.5;
   }
-  .nav-link.active {
-    @apply bg-bg-elevated text-ink;
-    box-shadow: inset 2px 0 0 theme("colors.brand.DEFAULT");
+  .segment {
+    @apply min-h-11 shrink-0 whitespace-nowrap rounded px-3 text-sm
+           font-medium text-ink-muted transition-colors
+           hover:text-ink sm:min-h-8;
+  }
+  .segment[aria-pressed="true"] {
+    @apply bg-lane font-semibold text-on-lane;
+  }
+
+  /* Tabela: um fio só, sob o cabeçalho. As linhas se separam pelo respiro. */
+  .sheet-table {
+    @apply w-full border-collapse text-[15px];
+  }
+  .sheet-table th {
+    @apply border-b border-bg-border px-3 py-2 text-left text-sm font-medium text-ink-muted;
+  }
+  .sheet-table td {
+    @apply px-3 py-2;
+  }
+  .sheet-table tbody tr:first-child td,
+  .sheet-table tbody tr:first-child th {
+    @apply pt-3;
+  }
+  .sheet-table tbody th {
+    @apply border-b-0 text-[15px] font-medium text-ink;
+  }
+  .sheet-table th:first-child,
+  .sheet-table td:first-child {
+    @apply pl-0;
+  }
+  .sheet-table th:last-child,
+  .sheet-table td:last-child {
+    @apply pr-0;
+  }
+  .sheet-table .num {
+    @apply text-right tabular-nums;
+  }
+  .sheet-table tfoot td {
+    @apply pt-3 font-semibold;
+  }
+
+  /* Aviso de erro: o único bloco com moldura na página. */
+  .alert-error {
+    @apply rounded-md border border-negative px-4 py-3 text-negative;
   }
 }
 
-/* Leaflet precisa disto para renderizar no tema escuro */
-.leaflet-container { background: #0a0e1a !important; }
+/* Barra de rolagem na cor do papel. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--bg-border)) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Leaflet nas cores da folha */
+.leaflet-container {
+  background: rgb(var(--bg-subtle)) !important;
+  font-family: inherit !important;
+}
 .leaflet-popup-content-wrapper {
-  background: #121a2e !important;
-  color: #e2e8f0 !important;
-  border: 1px solid #1e2a47;
+  background: rgb(var(--bg-card)) !important;
+  color: rgb(var(--ink)) !important;
+  border: 1px solid rgb(var(--ink) / 0.7);
+  border-radius: 4px !important;
+  box-shadow: 0 12px 32px -8px rgb(var(--shadow) / 0.28) !important;
 }
-.leaflet-popup-tip { background: #121a2e !important; }
+.leaflet-popup-tip {
+  background: rgb(var(--bg-card)) !important;
+}
+
+/* Um rótulo `sr-only` (position: absolute) dentro de uma tabela com rolagem
+   lateral escapa do contêiner e alarga a página inteira no celular, a menos
+   que o contêiner de rolagem seja o bloco de referência dele. */
+.overflow-x-auto {
+  position: relative;
+}

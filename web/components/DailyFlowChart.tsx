@@ -11,7 +11,17 @@ import {
   YAxis,
 } from "recharts";
 
+import Sheet from "@/components/Sheet";
+import {
+  CHART_AXIS,
+  CHART_CURSOR,
+  CHART_FONT_SIZE,
+  CHART_GRID,
+  CHART_TOOLTIP_LABEL_STYLE,
+  CHART_TOOLTIP_STYLE,
+} from "@/lib/chartTheme";
 import type { TimeseriesPoint } from "@/lib/types";
+import { VEHICLE_CLASSES } from "@/lib/vehicleClasses";
 import { formatNumber, shortDate } from "@/lib/utils";
 
 interface Props {
@@ -24,42 +34,57 @@ interface Props {
 export default function DailyFlowChart({
   data,
   height = 300,
-  title = "Fluxo diário por tipo de veículo",
-  subtitle = "Empilhado — últimos dias",
+  title = "Fluxo diário por classe",
+  subtitle = "Veículos por dia, empilhados por classe",
 }: Props) {
-  const prepared = data.map((p) => ({ ...p, label: shortDate(p.bucket) }));
+  const prepared = data
+    .filter((p) => p.total > 0)
+    .map((p) => ({ ...p, label: shortDate(p.bucket).replace(".", "").replace(" de ", " ") }));
 
   return (
-    <div className="card p-5">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="text-sm font-semibold">{title}</h3>
-          <p className="text-xs text-ink-muted">{subtitle}</p>
-        </div>
-      </div>
-      <ResponsiveContainer width="100%" height={height}>
-        <BarChart data={prepared} margin={{ left: -10, right: 10 }}>
-          <CartesianGrid stroke="#1e2a47" strokeDasharray="3 3" />
-          <XAxis dataKey="label" stroke="#64748b" fontSize={11} />
-          <YAxis stroke="#64748b" fontSize={11} allowDecimals={false} />
-          <Tooltip
-            contentStyle={{
-              background: "#121a2e",
-              border: "1px solid #1e2a47",
-              borderRadius: 8,
-              fontSize: 12,
-            }}
-            labelStyle={{ color: "#94a3b8" }}
-            formatter={(v: number) => formatNumber(v)}
-          />
-          <Legend wrapperStyle={{ fontSize: 12 }} />
-          <Bar dataKey="cars" stackId="v" fill="#38bdf8" name="Carros" />
-          <Bar dataKey="motorcycles" stackId="v" fill="#34d399" name="Motos" />
-          <Bar dataKey="buses" stackId="v" fill="#fbbf24" name="Ônibus" />
-          <Bar dataKey="trucks" stackId="v" fill="#f87171" name="Caminhões" />
-          <Bar dataKey="others" stackId="v" fill="#64748b" name="Outros" />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
+    <Sheet title={title} note={subtitle}>
+      {prepared.length === 0 ? (
+        <p className="py-6 text-ink-muted">Sem contagem diária no período.</p>
+      ) : (
+        <ResponsiveContainer width="100%" height={height}>
+          <BarChart data={prepared} margin={{ left: -8, right: 8, top: 4 }} maxBarSize={56}>
+            <CartesianGrid stroke={CHART_GRID} vertical={false} />
+            <XAxis dataKey="label" stroke={CHART_AXIS} fontSize={CHART_FONT_SIZE} tickLine={false} />
+            <YAxis
+              stroke={CHART_AXIS}
+              fontSize={CHART_FONT_SIZE}
+              allowDecimals={false}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(v: number) => formatNumber(v)}
+            />
+            <Tooltip
+              cursor={CHART_CURSOR}
+              contentStyle={CHART_TOOLTIP_STYLE}
+              labelStyle={CHART_TOOLTIP_LABEL_STYLE}
+              itemStyle={{ color: "rgb(var(--ink))" }}
+              formatter={(v: number) => formatNumber(v)}
+            />
+            <Legend
+              iconType="square"
+              wrapperStyle={{ fontSize: 13, color: "rgb(var(--ink-muted))" }}
+              formatter={(value) => (
+                <span style={{ color: "rgb(var(--ink-muted))" }}>{value}</span>
+              )}
+            />
+            {VEHICLE_CLASSES.map((c) => (
+              <Bar
+                key={c.key}
+                dataKey={c.key}
+                stackId="v"
+                fill={c.tone}
+                name={c.label}
+                isAnimationActive={false}
+              />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      )}
+    </Sheet>
   );
 }

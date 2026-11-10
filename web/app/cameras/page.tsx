@@ -1,15 +1,6 @@
 "use client";
 
-import {
-  Building2,
-  Camera as CameraIcon,
-  MapPin,
-  Pencil,
-  Plus,
-  Power,
-  Trash2,
-  X,
-} from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -23,22 +14,21 @@ import {
   updateCity,
   type CameraCreatePayload,
 } from "@/lib/api";
-import type { Camera, City, PointCategory } from "@/lib/types";
-import { categoryLabel } from "@/lib/utils";
+import CameraFormDialog, {
+  type CameraFormState,
+} from "@/components/CameraFormDialog";
+import CityCamerasSheet from "@/components/CityCamerasSheet";
+import CityFormDialog, { type CityFormState } from "@/components/CityFormDialog";
+import PageHeader from "@/components/PageHeader";
+import Sheet from "@/components/Sheet";
+import type { Camera, City } from "@/lib/types";
 
-// ---------------- form state ----------------
-type CameraFormState = {
-  id?: number;
-  name: string;
-  city_id: number | "";
-  latitude: string;
-  longitude: string;
-  district: string;
-  category: PointCategory;
-  notes: string;
-  stream_url: string;
-  active: boolean;
-};
+// A API devolve a mensagem crua; a tela diz o que falhou e o que fazer.
+function failure(what: string, e: any): string {
+  return `Não foi possível ${what}: ${
+    e?.message ?? "a API não respondeu"
+  }. Tente de novo.`;
+}
 
 const EMPTY_CAMERA_FORM = (defaultCity?: number): CameraFormState => ({
   name: "",
@@ -52,16 +42,6 @@ const EMPTY_CAMERA_FORM = (defaultCity?: number): CameraFormState => ({
   active: true,
 });
 
-const CATEGORIES: PointCategory[] = [
-  "avenue",
-  "crossing",
-  "highway",
-  "event_gate",
-  "square",
-  "parking",
-  "other",
-];
-
 export default function CamerasPage() {
   const [cities, setCities] = useState<City[]>([]);
   const [cameras, setCameras] = useState<Camera[]>([]);
@@ -69,9 +49,7 @@ export default function CamerasPage() {
   const [err, setErr] = useState<string | null>(null);
 
   // forms
-  const [cityForm, setCityForm] = useState<{ id?: number; name: string } | null>(
-    null
-  );
+  const [cityForm, setCityForm] = useState<CityFormState | null>(null);
   const [cameraForm, setCameraForm] = useState<CameraFormState | null>(null);
 
   async function reload() {
@@ -82,7 +60,11 @@ export default function CamerasPage() {
       setCities(cs);
       setCameras(cams);
     } catch (e: any) {
-      setErr(e?.message ?? "Falha ao carregar.");
+      setErr(
+        `Não foi possível carregar as câmeras e cidades: ${
+          e?.message ?? "a API não respondeu"
+        }. Recarregue a página.`
+      );
     } finally {
       setLoading(false);
     }
@@ -107,7 +89,7 @@ export default function CamerasPage() {
     if (!cityForm) return;
     const name = cityForm.name.trim();
     if (!name) {
-      setErr("Nome da cidade é obrigatório.");
+      setErr("Informe o nome da cidade para salvar.");
       return;
     }
     try {
@@ -119,21 +101,21 @@ export default function CamerasPage() {
       setCityForm(null);
       await reload();
     } catch (e: any) {
-      setErr(e?.message ?? "Falha ao salvar cidade.");
+      setErr(failure("salvar a cidade", e));
     }
   }
 
   async function removeCity(city: City) {
     const hasCams = (camerasByCity.get(city.id)?.length ?? 0) > 0;
     const msg = hasCams
-      ? `Remover "${city.name}"? Todas as ${camerasByCity.get(city.id)!.length} câmera(s) dessa cidade serão removidas também.`
-      : `Remover "${city.name}"?`;
+      ? `Remover a cidade "${city.name}"? As câmeras cadastradas nela (${camerasByCity.get(city.id)!.length}) também serão removidas.`
+      : `Remover a cidade "${city.name}"?`;
     if (!confirm(msg)) return;
     try {
       await deleteCity(city.id);
       await reload();
     } catch (e: any) {
-      setErr(e?.message ?? "Falha ao remover cidade.");
+      setErr(failure("remover a cidade", e));
     }
   }
 
@@ -146,10 +128,12 @@ export default function CamerasPage() {
     const cityId =
       typeof cameraForm.city_id === "number" ? cameraForm.city_id : Number(cameraForm.city_id);
 
-    if (!name) return setErr("Nome da câmera é obrigatório.");
-    if (!cityId) return setErr("Selecione a cidade.");
+    if (!name) return setErr("Informe o nome da câmera para salvar.");
+    if (!cityId) return setErr("Escolha a cidade da câmera para salvar.");
     if (Number.isNaN(latitude) || Number.isNaN(longitude))
-      return setErr("Latitude/longitude inválidas.");
+      return setErr(
+        "Latitude ou longitude inválida. Use graus decimais com ponto, como -23.5629."
+      );
 
     const payload: CameraCreatePayload = {
       name,
@@ -172,17 +156,17 @@ export default function CamerasPage() {
       setCameraForm(null);
       await reload();
     } catch (e: any) {
-      setErr(e?.message ?? "Falha ao salvar câmera.");
+      setErr(failure("salvar a câmera", e));
     }
   }
 
   async function removeCamera(cam: Camera) {
-    if (!confirm(`Remover câmera "${cam.name}"?`)) return;
+    if (!confirm(`Remover a câmera "${cam.name}"?`)) return;
     try {
       await deleteCamera(cam.id);
       await reload();
     } catch (e: any) {
-      setErr(e?.message ?? "Falha ao remover câmera.");
+      setErr(failure("remover a câmera", e));
     }
   }
 
@@ -205,402 +189,103 @@ export default function CamerasPage() {
     });
   }
 
-  return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Câmeras & cidades</h1>
-          <p className="text-sm text-ink-muted mt-1">
-            Cadastre cidades e vincule câmeras georreferenciadas. Cada câmera
-            passa a ser origem dos dados enviados em{" "}
-            <span className="text-ink">/upload</span> e <span className="text-ink">/live</span>.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            className="btn-primary inline-flex items-center gap-1"
-            onClick={() => setCityForm({ name: "" })}
-          >
-            <Plus size={14} /> Nova cidade
-          </button>
-          <button
-            className="btn inline-flex items-center gap-1"
-            onClick={() => openNewCamera()}
-            disabled={cities.length === 0}
-            title={
-              cities.length === 0
-                ? "Cadastre uma cidade antes de adicionar câmeras"
-                : "Nova câmera"
-            }
-          >
-            <Plus size={14} /> Nova câmera
-          </button>
-        </div>
-      </header>
+  // Com um diálogo aberto, o erro aparece dentro dele: atrás do fundo
+  // escurecido a pessoa não veria por que o formulário não salvou.
+  const dialogOpen = cityForm !== null || cameraForm !== null;
 
-      {err && (
-        <div className="card p-4 border-negative/40 bg-negative/10 text-negative text-sm flex items-start justify-between gap-3">
-          <span>{err}</span>
+  return (
+    <div className="space-y-10">
+      <PageHeader
+        title="Câmeras"
+        description="Cada câmera pertence a uma cidade e é a origem das contagens."
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => setCityForm({ name: "" })}
+            >
+              <Plus size={16} aria-hidden />
+              Cadastrar cidade
+            </button>
+          </div>
+        }
+      />
+
+      {err && !dialogOpen && (
+        <div
+          role="alert"
+          className="alert-error flex items-start justify-between gap-3 !py-1 !pr-1"
+        >
+          <p className="py-2.5 text-sm font-medium">{err}</p>
           <button
-            className="text-ink-muted hover:text-ink"
+            type="button"
+            className="btn-ghost h-11 w-11 shrink-0 px-0"
             onClick={() => setErr(null)}
-            aria-label="fechar"
+            aria-label="Fechar aviso de erro"
           >
-            <X size={14} />
+            <X size={18} aria-hidden />
           </button>
         </div>
       )}
 
-      {loading && (
-        <div className="card p-6 text-sm text-ink-muted">Carregando…</div>
+      {/* Recarregar depois de salvar mantém a lista na tela; o aviso de
+          carregamento só aparece enquanto ainda não há o que mostrar. */}
+      {loading && cities.length === 0 && (
+        <p className="text-ink-muted">Carregando câmeras e cidades…</p>
       )}
 
       {!loading && cities.length === 0 && (
-        <div className="card p-10 text-center">
-          <Building2 size={28} className="mx-auto text-ink-muted" />
-          <h2 className="mt-3 text-lg font-semibold">
-            Nenhuma cidade cadastrada
-          </h2>
-          <p className="mt-1 text-sm text-ink-muted max-w-md mx-auto">
-            Crie sua primeira cidade para começar a cadastrar câmeras. A cidade
-            serve só como agrupador — os dados espaciais (lat/lng) ficam na câmera.
+        <Sheet title="Nenhuma cidade cadastrada">
+          <p className="max-w-[60ch] text-ink-muted">
+            A cidade agrupa as câmeras. A posição no mapa, em latitude e
+            longitude, fica em cada câmera. Cadastre a primeira cidade para
+            liberar o cadastro de câmeras.
           </p>
           <button
-            className="btn-primary mt-4 inline-flex items-center gap-1"
+            type="button"
+            className="btn-primary mt-4"
             onClick={() => setCityForm({ name: "" })}
           >
-            <Plus size={14} /> Criar cidade
+            <Plus size={16} aria-hidden />
+            Cadastrar cidade
           </button>
-        </div>
+        </Sheet>
       )}
 
-      {!loading &&
-        cities.map((city) => {
-          const cams = camerasByCity.get(city.id) ?? [];
-          return (
-            <section key={city.id} className="card p-5">
-              <header className="flex flex-wrap items-center justify-between gap-2 mb-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Building2 size={16} className="text-brand" />
-                    <h2 className="text-lg font-semibold">{city.name}</h2>
-                    <span className="text-xs text-ink-muted">
-                      · {cams.length} câmera{cams.length === 1 ? "" : "s"}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex gap-1.5">
-                  <button
-                    className="btn-ghost inline-flex items-center gap-1"
-                    onClick={() => openNewCamera(city.id)}
-                  >
-                    <Plus size={13} /> câmera
-                  </button>
-                  <button
-                    className="btn-ghost inline-flex items-center gap-1"
-                    onClick={() => setCityForm({ id: city.id, name: city.name })}
-                    aria-label={`editar ${city.name}`}
-                  >
-                    <Pencil size={13} />
-                  </button>
-                  <button
-                    className="btn-ghost inline-flex items-center gap-1 text-negative hover:text-negative"
-                    onClick={() => removeCity(city)}
-                    aria-label={`remover ${city.name}`}
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              </header>
+      {cities.map((city) => (
+        <CityCamerasSheet
+          key={city.id}
+          city={city}
+          cameras={camerasByCity.get(city.id) ?? []}
+          onAddCamera={() => openNewCamera(city.id)}
+          onRenameCity={() => setCityForm({ id: city.id, name: city.name })}
+          onRemoveCity={() => removeCity(city)}
+          onEditCamera={openEditCamera}
+          onRemoveCamera={removeCamera}
+        />
+      ))}
 
-              {cams.length === 0 ? (
-                <div className="text-sm text-ink-muted">
-                  Sem câmeras ainda. Use{" "}
-                  <button
-                    className="text-brand hover:underline"
-                    onClick={() => openNewCamera(city.id)}
-                  >
-                    + câmera
-                  </button>{" "}
-                  para adicionar a primeira.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {cams.map((cam) => (
-                    <div key={cam.id} className="rounded-lg border border-bg-border p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-sm font-semibold min-w-0">
-                          <CameraIcon size={14} className="text-brand shrink-0" />
-                          <span className="truncate">{cam.name}</span>
-                        </div>
-                        <span
-                          className={`chip ${
-                            cam.active
-                              ? "text-positive border-positive/40"
-                              : "text-ink-muted"
-                          }`}
-                        >
-                          <Power size={10} />
-                          {cam.active ? "on" : "off"}
-                        </span>
-                      </div>
-
-                      <div className="mt-2 text-xs text-ink-muted flex items-center gap-1">
-                        <MapPin size={11} />
-                        {cam.latitude.toFixed(4)}, {cam.longitude.toFixed(4)}
-                      </div>
-                      <div className="mt-1 text-xs text-ink-muted">
-                        {categoryLabel(cam.category)}
-                        {cam.district ? ` · ${cam.district}` : ""}
-                      </div>
-
-                      {cam.stream_url && (
-                        <div className="mt-2 text-[11px] text-ink-muted font-mono truncate">
-                          {cam.stream_url}
-                        </div>
-                      )}
-
-                      <div className="mt-3 flex gap-1.5 justify-end">
-                        <button
-                          className="btn-ghost text-xs inline-flex items-center gap-1"
-                          onClick={() => openEditCamera(cam)}
-                        >
-                          <Pencil size={11} /> editar
-                        </button>
-                        <button
-                          className="btn-ghost text-xs inline-flex items-center gap-1 text-negative hover:text-negative"
-                          onClick={() => removeCamera(cam)}
-                        >
-                          <Trash2 size={11} /> remover
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-          );
-        })}
-
-      {/* ---------------- city modal ---------------- */}
       {cityForm && (
-        <Modal
-          title={cityForm.id ? "Editar cidade" : "Nova cidade"}
+        <CityFormDialog
+          form={cityForm}
+          error={err}
+          onChange={setCityForm}
           onClose={() => setCityForm(null)}
           onSubmit={submitCity}
-          submitLabel={cityForm.id ? "Salvar" : "Criar"}
-        >
-          <Field label="Nome">
-            <input
-              className="input"
-              autoFocus
-              value={cityForm.name}
-              onChange={(e) => setCityForm({ ...cityForm, name: e.target.value })}
-              placeholder="ex: São Paulo"
-            />
-          </Field>
-        </Modal>
+        />
       )}
 
-      {/* ---------------- camera modal ---------------- */}
       {cameraForm && (
-        <Modal
-          title={cameraForm.id ? "Editar câmera" : "Nova câmera"}
+        <CameraFormDialog
+          form={cameraForm}
+          cities={cities}
+          error={err}
+          onChange={setCameraForm}
           onClose={() => setCameraForm(null)}
           onSubmit={submitCamera}
-          submitLabel={cameraForm.id ? "Salvar" : "Criar"}
-          wide
-        >
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Nome">
-              <input
-                className="input"
-                autoFocus
-                value={cameraForm.name}
-                onChange={(e) =>
-                  setCameraForm({ ...cameraForm, name: e.target.value })
-                }
-                placeholder="ex: Av. Paulista × Consolação"
-              />
-            </Field>
-            <Field label="Cidade">
-              <select
-                className="input"
-                value={cameraForm.city_id}
-                onChange={(e) =>
-                  setCameraForm({
-                    ...cameraForm,
-                    city_id: e.target.value ? Number(e.target.value) : "",
-                  })
-                }
-              >
-                <option value="">— escolher —</option>
-                {cities.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-
-            <Field label="Latitude">
-              <input
-                className="input font-mono"
-                inputMode="decimal"
-                value={cameraForm.latitude}
-                onChange={(e) =>
-                  setCameraForm({ ...cameraForm, latitude: e.target.value })
-                }
-                placeholder="-23.5629"
-              />
-            </Field>
-            <Field label="Longitude">
-              <input
-                className="input font-mono"
-                inputMode="decimal"
-                value={cameraForm.longitude}
-                onChange={(e) =>
-                  setCameraForm({ ...cameraForm, longitude: e.target.value })
-                }
-                placeholder="-46.6544"
-              />
-            </Field>
-
-            <Field label="Distrito / bairro">
-              <input
-                className="input"
-                value={cameraForm.district}
-                onChange={(e) =>
-                  setCameraForm({ ...cameraForm, district: e.target.value })
-                }
-                placeholder="opcional"
-              />
-            </Field>
-            <Field label="Categoria">
-              <select
-                className="input"
-                value={cameraForm.category}
-                onChange={(e) =>
-                  setCameraForm({
-                    ...cameraForm,
-                    category: e.target.value as PointCategory,
-                  })
-                }
-              >
-                {CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {categoryLabel(c)}
-                  </option>
-                ))}
-              </select>
-            </Field>
-
-            <Field label="URL do stream (opcional)" className="sm:col-span-2">
-              <input
-                className="input font-mono"
-                value={cameraForm.stream_url}
-                onChange={(e) =>
-                  setCameraForm({ ...cameraForm, stream_url: e.target.value })
-                }
-                placeholder="rtsp://... ou https://... — pode ficar vazio e ser preenchido na tela /live"
-              />
-            </Field>
-
-            <Field label="Notas" className="sm:col-span-2">
-              <textarea
-                className="input min-h-[72px]"
-                value={cameraForm.notes}
-                onChange={(e) =>
-                  setCameraForm({ ...cameraForm, notes: e.target.value })
-                }
-                placeholder="observações livres"
-              />
-            </Field>
-
-            <label className="sm:col-span-2 inline-flex items-center gap-2 text-sm text-ink-muted">
-              <input
-                type="checkbox"
-                checked={cameraForm.active}
-                onChange={(e) =>
-                  setCameraForm({ ...cameraForm, active: e.target.checked })
-                }
-              />
-              câmera ativa
-            </label>
-          </div>
-        </Modal>
+        />
       )}
-    </div>
-  );
-}
-
-// ---------------- small UI helpers ----------------
-function Field({
-  label,
-  children,
-  className,
-}: {
-  label: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <label className={`flex flex-col gap-1 ${className ?? ""}`}>
-      <span className="text-xs text-ink-muted">{label}</span>
-      {children}
-    </label>
-  );
-}
-
-function Modal({
-  title,
-  children,
-  onClose,
-  onSubmit,
-  submitLabel = "Salvar",
-  wide = false,
-}: {
-  title: string;
-  children: React.ReactNode;
-  onClose: () => void;
-  onSubmit: () => void;
-  submitLabel?: string;
-  wide?: boolean;
-}) {
-  return (
-    <div
-      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-start sm:items-center justify-center p-4 overflow-auto"
-      onClick={onClose}
-    >
-      <form
-        onClick={(e) => e.stopPropagation()}
-        onSubmit={(e) => {
-          e.preventDefault();
-          onSubmit();
-        }}
-        className={`card p-5 w-full ${wide ? "max-w-2xl" : "max-w-md"} space-y-4`}
-      >
-        <header className="flex items-center justify-between">
-          <h3 className="text-base font-semibold">{title}</h3>
-          <button
-            type="button"
-            className="text-ink-muted hover:text-ink"
-            onClick={onClose}
-            aria-label="fechar"
-          >
-            <X size={16} />
-          </button>
-        </header>
-        <div>{children}</div>
-        <footer className="flex justify-end gap-2 pt-2 border-t border-bg-border">
-          <button type="button" className="btn" onClick={onClose}>
-            Cancelar
-          </button>
-          <button type="submit" className="btn-primary">
-            {submitLabel}
-          </button>
-        </footer>
-      </form>
     </div>
   );
 }

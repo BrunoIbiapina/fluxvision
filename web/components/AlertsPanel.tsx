@@ -1,90 +1,124 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, Info, Siren } from "lucide-react";
+import { Check, CircleCheck, Info, Siren, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import type { Alert } from "@/lib/types";
+import Sheet from "@/components/Sheet";
+import type { Alert, AlertLevel } from "@/lib/types";
 import { ackAlert } from "@/lib/api";
-import { cn, formatPct } from "@/lib/utils";
+import {
+  ALERT_LEVEL_COLOR,
+  ALERT_LEVEL_LABEL,
+  formatAlertMoment,
+  formatAlertTitle,
+} from "@/lib/alertGroups";
+import { cn, formatNumber, formatPct } from "@/lib/utils";
 
 interface Props {
   alerts: Alert[];
-  compact?: boolean;
 }
 
-const STYLE = {
-  critical: { icon: Siren, color: "text-critical", bg: "bg-critical/10 border-critical/30" },
-  warning:  { icon: AlertTriangle, color: "text-warning",  bg: "bg-warning/10 border-warning/30" },
-  info:     { icon: Info, color: "text-brand", bg: "bg-brand/10 border-brand/30" },
+const LEVEL_ICON: Record<AlertLevel, typeof Siren> = {
+  critical: Siren,
+  warning: TriangleAlert,
+  info: Info,
 };
 
-export default function AlertsPanel({ alerts, compact = false }: Props) {
-  const [list, setList] = useState(alerts);
+// Variação só faz sentido em anomalia estatística; alerta de evento vem com 0.
+function hasMeaningfulVariation(v: number | undefined | null): v is number {
+  return typeof v === "number" && Math.abs(v) >= 0.05;
+}
 
-  // Mantém o estado local sincronizado quando a lista de alertas vinda do pai muda
+export default function AlertsPanel({ alerts }: Props) {
+  const [list, setList] = useState(alerts);
+  const [ackError, setAckError] = useState<string | null>(null);
+
   useEffect(() => {
     setList(alerts);
   }, [alerts]);
 
   async function handleAck(id: number) {
+    setAckError(null);
     try {
       await ackAlert(id);
       setList((xs) => xs.filter((a) => a.id !== id));
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      setAckError(
+        `Não foi possível marcar o alerta ${id} como visto: ${
+          err?.message ?? "a API não respondeu"
+        }. Tente de novo.`
+      );
     }
   }
 
   return (
-    <div className="card p-5">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="text-sm font-semibold">Alertas ativos</h3>
-          <p className="text-xs text-ink-muted">
-            Anomalias detectadas em relação ao baseline histórico
-          </p>
-        </div>
-        <span className="chip">{list.length}</span>
-      </div>
-
+    <Sheet
+      title={
+        list.length === 1 ? "1 alerta" : `${formatNumber(list.length)} alertas`
+      }
+    >
+      {ackError && (
+        <p role="alert" className="alert-error mb-3">
+          {ackError}
+        </p>
+      )}
       {list.length === 0 ? (
-        <div className="text-center py-10 text-ink-muted text-sm flex flex-col items-center gap-2">
-          <CheckCircle2 size={28} className="text-positive" />
-          Sem alertas ativos no momento.
-        </div>
+        <EmptyAlerts />
       ) : (
-        <ul className={cn("space-y-3", compact && "max-h-72 overflow-auto pr-1")}>
+        <ul>
           {list.map((a) => {
-            const s = STYLE[a.level];
-            const Icon = s.icon;
+            const Icon = LEVEL_ICON[a.level];
+            const color = ALERT_LEVEL_COLOR[a.level];
+            const label = ALERT_LEVEL_LABEL[a.level];
             return (
               <li
                 key={a.id}
-                className={cn("rounded-lg border p-3 flex items-start gap-3", s.bg)}
+                className="flex flex-col gap-3 py-4 sm:flex-row sm:items-start"
               >
-                <Icon size={18} className={cn("mt-0.5 shrink-0", s.color)} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-medium truncate">{a.title}</span>
-                    <span className={cn("text-xs font-semibold", s.color)}>
-                      {formatPct(a.variation_pct)}
-                    </span>
-                  </div>
-                  <p className="text-xs text-ink-muted mt-0.5">{a.message}</p>
-                  <div className="mt-2 flex items-center gap-2">
-                    <button
-                      onClick={() => handleAck(a.id)}
-                      className="text-[11px] text-ink-muted hover:text-ink underline underline-offset-2"
-                    >
-                      marcar como visto
-                    </button>
+                <div className="flex min-w-0 flex-1 items-start gap-3">
+                  <Icon size={18} className={cn("mt-0.5 shrink-0", color)} aria-hidden />
+                  <div className="min-w-0">
+                    <p className="font-semibold leading-snug">
+                      <span className="sr-only">{label}: </span>
+                      {formatAlertTitle(a.title)}
+                      {hasMeaningfulVariation(a.variation_pct) && (
+                        <span className={cn("ml-2 text-sm tabular-nums", color)}>
+                          {formatPct(a.variation_pct)}
+                        </span>
+                      )}
+                    </p>
+                    <p className="mt-0.5 max-w-[75ch] text-sm text-ink-muted">
+                      {a.message}
+                    </p>
+                    <p className="mt-1 text-xs text-ink-soft">
+                      {formatAlertMoment(a.created_at)}
+                    </p>
                   </div>
                 </div>
+                {!a.acknowledged && (
+                  <button
+                    type="button"
+                    onClick={() => handleAck(a.id)}
+                    className="btn shrink-0 self-start"
+                  >
+                    <Check size={16} aria-hidden />
+                    Marcar como visto
+                  </button>
+                )}
               </li>
             );
           })}
         </ul>
       )}
+    </Sheet>
+  );
+}
+
+function EmptyAlerts() {
+  return (
+    <div className="flex items-center gap-3 py-2 text-ink-muted">
+      <CircleCheck size={20} className="shrink-0 text-positive" aria-hidden />
+      <p>Nenhum alerta aberto. Pedestre na pista, veículo parado e variação fora do padrão aparecem aqui.</p>
     </div>
   );
 }

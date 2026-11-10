@@ -3,9 +3,19 @@
 import { useEffect, useState } from "react";
 
 import MapView from "@/components/MapView";
+import PageHeader from "@/components/PageHeader";
+import SegmentedControl from "@/components/SegmentedControl";
+import Sheet from "@/components/Sheet";
 import { getGeo } from "@/lib/api";
 import type { GeoPoint } from "@/lib/types";
-import { formatNumber } from "@/lib/utils";
+import { categoryLabel, formatNumber } from "@/lib/utils";
+
+const PERIODS = [
+  { value: 7, label: "7 dias" },
+  { value: 30, label: "30 dias" },
+  { value: 90, label: "90 dias" },
+  { value: 365, label: "12 meses" },
+];
 
 export default function HeatmapPage() {
   const [points, setPoints] = useState<GeoPoint[]>([]);
@@ -15,59 +25,61 @@ export default function HeatmapPage() {
     getGeo(days).then(setPoints).catch(() => {});
   }, [days]);
 
+  const ranked = [...points].sort((a, b) => b.total - a.total);
+
   return (
-    <div className="space-y-6">
-      <header className="flex items-end justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold">Mapa de calor</h1>
-          <p className="text-sm text-ink-muted mt-1">
-            Geointeligência do fluxo: identifique onde a intensidade é maior
-            e quais áreas merecem atenção da segurança.
-          </p>
-        </div>
-        <div className="flex gap-1">
-          {[7, 30, 90, 365].map((d) => (
-            <button
-              key={d}
-              className={`px-3 py-1.5 text-xs rounded-md border ${
-                days === d
-                  ? "bg-brand/15 border-brand/40 text-brand"
-                  : "border-bg-border text-ink-muted hover:text-ink"
-              }`}
-              onClick={() => setDays(d)}
-            >
-              {d} dias
-            </button>
-          ))}
-        </div>
-      </header>
+    <div className="space-y-10">
+      <PageHeader
+        title="Mapa de calor"
+        description="Onde cada câmera está e quanto fluxo ela contou no período."
+        actions={
+          <SegmentedControl
+            label="Período"
+            options={PERIODS}
+            value={days}
+            onChange={setDays}
+          />
+        }
+      />
 
       <MapView points={points} height={520} />
 
-      {points.length === 0 ? (
-        <div className="card p-6 text-sm text-ink-muted text-center">
-          Nenhum ponto com dados no período. Envie vídeos ou inicie streams
-          para que o mapa ganhe vida.
-        </div>
-      ) : (
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {points.slice(0, 3).map((p) => (
-            <div key={p.camera_id} className="card p-5">
-              <div className="flex items-center justify-between text-xs text-ink-muted">
-                <span>{p.city_name}</span>
-                <span>intensidade {Math.round(p.intensity * 100)}%</span>
-              </div>
-              <div className="mt-2 text-base font-semibold">{p.camera_name}</div>
-              <div className="mt-3 text-3xl font-bold">
-                {formatNumber(p.total)}
-              </div>
-              <div className="text-xs text-ink-muted">
-                veículos no período
-              </div>
-            </div>
-          ))}
-        </section>
-      )}
+      <Sheet title="Pontos no mapa" note="Do maior para o menor fluxo">
+        {ranked.length === 0 ? (
+          <p className="py-8 text-ink-muted">
+            Nenhuma câmera com contagem no período. Escolha um período maior,
+            envie um vídeo ou inicie uma transmissão.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="sheet-table min-w-[520px]">
+              <thead>
+                <tr>
+                  <th scope="col" >Câmera</th>
+                  <th scope="col">Tipo</th>
+                  <th scope="col" className="!text-right">Veículos</th>
+                  <th scope="col" className="!text-right">Fluxo relativo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ranked.map((p) => (
+                  <tr key={p.camera_id}>
+                    <td >
+                      <span className="font-semibold">{p.camera_name}</span>
+                      <span className="block text-sm text-ink-muted">{p.city_name}</span>
+                    </td>
+                    <td className="text-ink-muted">{categoryLabel(p.category)}</td>
+                    <td className="num font-semibold">{formatNumber(p.total)}</td>
+                    <td className="num text-ink-muted">
+                      {Math.round(p.intensity * 100)}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Sheet>
     </div>
   );
 }

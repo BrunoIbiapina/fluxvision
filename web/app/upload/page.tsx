@@ -1,11 +1,18 @@
 "use client";
 
-import { CheckCircle2, FileVideo, Loader2, UploadCloud } from "lucide-react";
+import { CircleCheck, Loader2, Upload } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
+import PageHeader from "@/components/PageHeader";
+import Sheet from "@/components/Sheet";
 import { getCameras, getVideos, heatmapUrl, uploadVideo } from "@/lib/api";
 import type { Camera, Video } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { describeVideoStatus, formatVideoRecordedAt } from "@/lib/videoStatus";
+
+const UPLOAD_DONE_MESSAGE =
+  "Vídeo enviado. Ele entrou na fila de processamento e os gráficos se atualizam sozinhos quando a contagem terminar.";
 
 export default function UploadPage() {
   const [cameras, setCameras] = useState<Camera[]>([]);
@@ -30,71 +37,73 @@ export default function UploadPage() {
 
   async function handleFile(file: File) {
     if (!selected) {
-      setMsg("Selecione uma câmera antes.");
+      setMsg("Escolha a câmera de origem antes de enviar o vídeo.");
       return;
     }
     setBusy(true);
     setMsg(null);
     try {
       await uploadVideo(selected, file);
-      setMsg(
-        "Upload concluído. O vídeo está na fila de processamento — os gráficos se atualizarão automaticamente."
-      );
+      setMsg(UPLOAD_DONE_MESSAGE);
       await reload();
     } catch (e: any) {
-      setMsg(`Falha: ${e?.message ?? e}`);
+      setMsg(
+        `Não foi possível enviar o vídeo: ${
+          e?.message ?? "a API não respondeu"
+        }. Tente de novo.`
+      );
     } finally {
       setBusy(false);
     }
   }
 
+  const uploadSucceeded = msg === UPLOAD_DONE_MESSAGE;
+  const cameraName = (id: number) =>
+    cameras.find((c) => c.id === id)?.name ?? `Câmera ${id}`;
+
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-bold">Upload de vídeo</h1>
-        <p className="text-sm text-ink-muted mt-1">
-          Envie vídeos offline (MP4/MOV/AVI) para o pipeline. A IA detecta e
-          rastreia veículos, contabiliza o fluxo e gera heatmap.
-        </p>
-      </header>
+      <PageHeader
+        title="Enviar vídeo"
+        description="Envie uma gravação em MP4, MOV ou AVI. O sistema detecta e rastreia os veículos, conta o fluxo e gera o mapa de calor."
+      />
 
       {cameras.length === 0 ? (
-        <div className="card p-10 text-center">
-          <UploadCloud size={28} className="mx-auto text-ink-muted" />
-          <h2 className="mt-3 text-lg font-semibold">
-            Nenhuma câmera cadastrada
-          </h2>
-          <p className="mt-1 text-sm text-ink-muted max-w-md mx-auto">
-            Cadastre uma cidade e uma câmera em{" "}
-            <Link href="/cameras" className="text-brand hover:underline">
-              /cameras
-            </Link>{" "}
-            antes de enviar vídeos. A câmera é a origem dos dados que alimentam
-            o dashboard.
+        <Sheet title="Nenhuma câmera cadastrada">
+          <p className="max-w-[65ch] text-ink-muted">
+            Todo vídeo precisa de uma câmera de origem, que diz de onde vem a
+            contagem. Cadastre uma cidade e uma câmera antes de enviar.
           </p>
-        </div>
+          <Link href="/cameras" className="btn-primary mt-4">
+            Abrir Câmeras
+          </Link>
+        </Sheet>
       ) : (
-        <div className="card p-5">
-          <div className="flex flex-wrap items-center gap-3 mb-4">
-            <label className="text-xs uppercase tracking-wider text-ink-muted">
+        <Sheet title="Novo vídeo">
+          <div className="sm:w-80">
+            <label
+              htmlFor="upload-camera"
+              className="mb-1 block text-sm font-semibold"
+            >
               Câmera de origem
             </label>
             <select
-              className="bg-bg-elevated border border-bg-border rounded-md px-2 py-1.5 text-sm text-ink outline-none"
+              id="upload-camera"
+              className="input"
               value={selected ?? ""}
               onChange={(e) => setSelected(Number(e.target.value))}
             >
               {cameras.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
-                  {c.city_name ? ` — ${c.city_name}` : ""} (id {c.id})
+                  {c.city_name ? `, ${c.city_name}` : ""}
                 </option>
               ))}
             </select>
           </div>
 
           <label
-            className="block border-2 border-dashed border-bg-border rounded-xl p-10 text-center cursor-pointer hover:border-brand/50 transition-colors"
+            className="mt-4 flex min-h-40 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-ink/50 px-4 py-8 text-center transition-colors hover:bg-bg-elevated focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ink"
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
               e.preventDefault();
@@ -106,90 +115,102 @@ export default function UploadPage() {
               ref={inputRef}
               type="file"
               accept="video/*"
-              className="hidden"
+              className="sr-only"
               onChange={(e) => {
                 const f = e.target.files?.[0];
                 if (f) handleFile(f);
               }}
             />
-            <UploadCloud
-              size={36}
-              className={`mx-auto mb-3 ${busy ? "text-brand" : "text-ink-muted"}`}
-            />
-            <div className="font-medium">
-              {busy ? "Enviando…" : "Arraste um vídeo aqui ou clique para selecionar"}
-            </div>
-            <div className="text-xs text-ink-muted mt-1">
-              Formatos: .mp4, .mov, .avi — até 200MB
-            </div>
+            {busy ? (
+              <Loader2 size={20} className="animate-spin text-ink-muted" aria-hidden />
+            ) : (
+              <Upload size={20} className="text-ink-muted" aria-hidden />
+            )}
+            <span className="mt-1 font-semibold">
+              {busy
+                ? "Enviando o vídeo…"
+                : "Arraste um vídeo para cá ou clique para escolher o arquivo"}
+            </span>
+            <span className="text-sm text-ink-muted">
+              MP4, MOV ou AVI, até 200 MB
+            </span>
           </label>
 
-          {msg && (
-            <div className="mt-4 text-sm flex items-center gap-2 text-ink-muted">
-              {busy ? (
-                <Loader2 size={14} className="animate-spin text-brand" />
-              ) : (
-                <CheckCircle2 size={14} className="text-positive" />
-              )}
-              {msg}
-            </div>
-          )}
-        </div>
+          {msg &&
+            (uploadSucceeded ? (
+              <p role="status" className="mt-4 flex items-start gap-2">
+                <CircleCheck size={18} className="mt-0.5 shrink-0 text-positive" aria-hidden />
+                {msg}
+              </p>
+            ) : (
+              <p role="alert" className="alert-error mt-4">
+                {msg}
+              </p>
+            ))}
+        </Sheet>
       )}
 
-      <div className="card p-5">
-        <h3 className="text-sm font-semibold mb-3">Últimos vídeos processados</h3>
-        <ul className="divide-y divide-bg-border">
-          {videos.map((v) => (
-            <li key={v.id} className="py-3 flex items-center gap-3">
-              <FileVideo size={16} className="text-ink-muted" />
-              <div className="flex-1 min-w-0">
-                <Link
-                  href={`/videos/${v.id}`}
-                  className="text-sm truncate block hover:text-brand"
-                >
-                  {v.filename}
-                </Link>
-                <div className="text-xs text-ink-muted">
-                  cam {v.camera_id} · {new Date(v.recorded_at).toLocaleString("pt-BR")}
-                </div>
-              </div>
-              <span
-                className={`chip ${
-                  v.status === "done"
-                    ? "text-positive border-positive/40"
-                    : v.status === "failed"
-                    ? "text-negative border-negative/40"
-                    : "text-warning border-warning/40"
-                }`}
-              >
-                {v.status}
-              </span>
-              <Link
-                href={`/videos/${v.id}`}
-                className="text-brand text-xs underline underline-offset-2"
-              >
-                ver detalhe
-              </Link>
-              {v.heatmap_path && (
-                <a
-                  href={heatmapUrl(v.id)}
-                  target="_blank"
-                  className="text-brand text-xs underline underline-offset-2"
-                  rel="noreferrer"
-                >
-                  heatmap
-                </a>
-              )}
-            </li>
-          ))}
-          {videos.length === 0 && (
-            <li className="py-6 text-center text-sm text-ink-muted">
-              Nenhum vídeo enviado ainda.
-            </li>
-          )}
-        </ul>
-      </div>
+      <Sheet title="Vídeos enviados">
+        {videos.length === 0 ? (
+          <p className="py-6 text-ink-muted">
+            Nenhum vídeo enviado ainda. O primeiro aparece aqui assim que o
+            envio terminar.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="sheet-table min-w-[640px]">
+              <thead>
+                <tr>
+                  <th scope="col">Arquivo</th>
+                  <th scope="col">Câmera</th>
+                  <th scope="col">Gravado em</th>
+                  <th scope="col">Estado</th>
+                  <th scope="col">Mapa de calor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {videos.map((v) => {
+                  const status = describeVideoStatus(v.status);
+                  return (
+                    <tr key={v.id}>
+                      <td className="max-w-[20rem]">
+                        <Link
+                          href={`/videos/${v.id}`}
+                          title={v.filename}
+                          className="flex min-h-11 items-center font-semibold text-brand underline sm:min-h-0"
+                        >
+                          <span className="truncate">{v.filename}</span>
+                        </Link>
+                      </td>
+                      <td className="text-ink-muted">{cameraName(v.camera_id)}</td>
+                      <td className="whitespace-nowrap tabular-nums text-ink-muted">
+                        {formatVideoRecordedAt(v.recorded_at)}
+                      </td>
+                      <td className={cn("whitespace-nowrap font-semibold", status.tone)}>
+                        {status.label}
+                      </td>
+                      <td>
+                        {v.heatmap_path ? (
+                          <a
+                            href={heatmapUrl(v.id)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex min-h-11 items-center text-brand underline sm:min-h-0"
+                          >
+                            Abrir imagem
+                          </a>
+                        ) : (
+                          <span className="text-ink-soft">Não gerado</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Sheet>
     </div>
   );
 }
